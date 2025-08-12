@@ -1,0 +1,509 @@
+{
+    "1": {
+        "name": "Aktiva",
+        "sub_rows": {
+            "2": {
+                "name": "Pohledávky za upsaný základní kapitál"
+            },
+            "3": {
+                "name": "Dlouhodobý majetek",
+                "sub_rows": {
+                    "4": {
+                        "name": "Dlouhodobý nehmotný majetek",
+                        "sub_rows": {
+                            "5": {
+                                "name": "Nehmotné výsledky výzkumu a vývoje"
+                            },
+                            "6": {
+                                "name": "Ocenitelná práva",
+                                "sub_rows": {
+                                    "7": {
+                                        "name": "Software"
+                                    },
+                                    "8": {
+                                        "name": "Ostatní ocenitelná práva"
+                                    }
+                                }
+                            },
+                            "9": {
+                                "name": "Goodwill"
+                            },
+                            "10": {
+                                "name": "Ostatní dlouhodobý nehmotný majetek"
+                            },
+                            "11": {
+                                "name": "Posk. zálohy na dl. a nedokonč.dl. nehm. majetek",
+                                "sub_rows": {
+                                    "12": {
+                                        "name": "Poskytnuté zálohy na dlouhodobý nehmotný majetek"
+                                    },
+                                    "13": {
+                                        "name": "Nedokončený dlouhodobý nehmotný majetek"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "14": {
+                        "name": "Dlouhodobý hmotný majetek",
+                        "sub_rows": {
+                            "15": {
+                                "name": "Pozemky a stavby",
+                                "sub_rows": {
+                                    "16": {
+                                        "name": "Pozemky"
+                                    },
+                                    "17": {
+                                        "name": "Stavby"
+                                    }
+                                }
+                            },
+                            "18": {
+                                "name": "Hmotné movité věci a jejich soubory"
+                            },
+                            "19": {
+                                "name": "Oceňovací rozdíl k nabytému majetku"
+                            },
+                            "20": {
+                                "name": "Ostatní dlouhodobý hmotný majetek",
+                                "sub_rows": {
+                                    "21": {
+                                        "name": "Pěstitelské celky trvalých porostů"
+                                    },
+                                    "22": {
+                                        "name": "Dospělá zvířata a jejich skupiny"
+                                    },
+                                    "23": {
+                                        "name": "Jiný dlouhodobý hmotný majetek"
+                                    }
+                                }
+                            },
+                            "24": {
+                                "name": "Poskytnuté zálohy na DHM a nedokončený DHM",
+                                "sub_rows": {
+                                    "25": {
+                                        "name": "Poskytnuté zálohy na dlouhodobý hmotný majetek"
+                                    },
+                                    "26": {
+                                        "name": "Nedokončený dlouhodobý hmotný majetek"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "27": {
+                        "name": "Dlouhodobý finanční majetek",
+                        "sub_rows": {
+                            "28": {
+                                "name": "Podíly - ovládaná nebo ovládající osoba"
+                            },
+                            "29": {
+                                "name": "Zápůjčky a úvěry - ovládaná nebo ovládající osoba"
+                            },
+                            "30": {
+                                "name": "Podíly - podstatný vliv"
+                            },
+                            "31": {
+                                "name": "Zápůjčky a úvěry - podstatný vliv"
+                            },
+                            "32": {
+                                "name": "Ostatní dlouhodobé cenné papíry a podíly"
+                            },
+                            "33": {
+                                "name": "Zápůjčky a úvěry - ostatní"
+                            },
+                            "34": {
+                                "name": "Ostatní dlouhodobý finanční majetek",
+                                "sub_rows": {
+                                    "35": {
+                                        "name": "Jiný dlouhodobý finanční majetek"
+                                    },
+                                    "36": {
+                                        "name": "Poskytnuté zálohy na dlouhodobý finanční majetek"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "37": {
+                "name": "Oběžná aktiva",
+                "sub_rows": {
+                    "38": {
+                        "name": "Zásoby",
+                        "sub_rows": {
+                            "39": {
+                                "name": "Materiál"
+                            },
+                            "40": {
+                                "name": "Nedokončená výroba a polotovary"
+                            },
+                            "41": {
+                                "name": "Výrobky a zboží",
+                                "sub_rows": {
+                                    "42": {
+                                        "name": "Výrobky"
+                                    },
+                                    "43": {
+                                        "name": "Zboží"
+                                    }
+                                }
+                            },
+                            "44": {
+                                "name": "Mladá a ostatní zvířata a jejich skupiny"
+                            },
+                            "45": {
+                                "name": "Poskytnuté zálohy na zásoby"
+                            }
+                        }
+                    },
+                    "46": {
+                        "name": "Pohledávky",
+                        "sub_rows": {
+                            "47": {
+                                "name": "Dlouhodobé pohledávky",
+                                "sub_rows": {
+                                    "48": {
+                                        "name": "Pohledávky z obchodních vztahů"
+                                    },
+                                    "49": {
+                                        "name": "Pohledávky - ovládaná nebo ovládající osoba"
+                                    },
+                                    "50": {
+                                        "name": "Pohledávky - podstatný vliv"
+                                    },
+                                    "51": {
+                                        "name": "Odložená daňová pohledávka"
+                                    },
+                                    "52": {
+                                        "name": "Pohledávky - ostatní",
+                                        "sub_rows": {
+                                            "53": {
+                                                "name": "Pohledávky za společníky"
+                                            },
+                                            "54": {
+                                                "name": "Dlouhodobé poskytnuté zálohy"
+                                            },
+                                            "55": {
+                                                "name": "Dohadné účty aktivní"
+                                            },
+                                            "56": {
+                                                "name": "Jiné pohledávky"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "57": {
+                                "name": "Krátkodobé pohledávky",
+                                "sub_rows": {
+                                    "58": {
+                                        "name": "Pohledávky z obchodních vztahů"
+                                    },
+                                    "59": {
+                                        "name": "Pohledávky - ovládaná nebo ovládající osoba"
+                                    },
+                                    "60": {
+                                        "name": "Pohledávky - podstatný vliv"
+                                    },
+                                    "61": {
+                                        "name": "Pohledávky ostatní",
+                                        "sub_rows": {
+                                            "62": {
+                                                "name": "Pohledávky za společníky"
+                                            },
+                                            "63": {
+                                                "name": "Sociální zabezpečení a zdravotní pojištění"
+                                            },
+                                            "64": {
+                                                "name": "Stát - daňové pohledávky"
+                                            },
+                                            "65": {
+                                                "name": "Krátkodobé poskytnuté zálohy"
+                                            },
+                                            "66": {
+                                                "name": "Dohadné účty aktivní"
+                                            },
+                                            "67": {
+                                                "name": "Jiné pohledávky"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "68": {
+                        "name": "Krátkodobý finanční majetek",
+                        "sub_rows": {
+                            "69": {
+                                "name": "Podíly - ovládaná nebo ovládající osoba"
+                            },
+                            "70": {
+                                "name": "Ostatní krátkodobý finanční majetek"
+                            }
+                        }
+                    },
+                    "71": {
+                        "name": "Peněžní prostředky",
+                        "sub_rows": {
+                            "72": {
+                                "name": "Peněžní prostředky v pokladně"
+                            },
+                            "73": {
+                                "name": "Peněžní prostředky na účtech"
+                            }
+                        }
+                    }
+                }
+            },
+            "74": {
+                "name": "Časové rozlišení",
+                "sub_rows": {
+                    "75": {
+                        "name": "Náklady příštích období"
+                    },
+                    "76": {
+                        "name": "Komplexní náklady příštích období"
+                    },
+                    "77": {
+                        "name": "Příjmy příštích období"
+                    }
+                }
+            }
+        }
+    },
+    "78": {
+        "name": "Pasiva",
+        "sub_rows": {
+            "79": {
+                "name": "Vlastní kapitál",
+                "sub_rows": {
+                    "80": {
+                        "name": "Základní kapitál",
+                        "sub_rows": {
+                            "81": {
+                                "name": "Základní kapitál"
+                            },
+                            "82": {
+                                "name": "Vlastní podíly (-)"
+                            },
+                            "83": {
+                                "name": "Změny základního kapitálu"
+                            }
+                        }
+                    },
+                    "84": {
+                        "name": "Ážio a kapitálové fondy",
+                        "sub_rows": {
+                            "85": {
+                                "name": "Ážio"
+                            },
+                            "86": {
+                                "name": "Kapitálové fondy",
+                                "sub_rows": {
+                                    "87": {
+                                        "name": "Ostatní kapitálové fondy"
+                                    },
+                                    "88": {
+                                        "name": "Oceňovací rozdíly z přecenění majetku a závazků (+/-)"
+                                    },
+                                    "89": {
+                                        "name": "Oceňovací rozdíly z přecenění při přeměnách obchodních korporací (+/-)"
+                                    },
+                                    "90": {
+                                        "name": "Rozdíly z přeměn obchodních korporací (+/-)"
+                                    },
+                                    "91": {
+                                        "name": "Rozdíly z ocenění při přeměnách obchodních korporací (+/-)"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "92": {
+                        "name": "Fondy ze zisku",
+                        "sub_rows": {
+                            "93": {
+                                "name": "Ostatní rezervní fondy"
+                            },
+                            "94": {
+                                "name": "Statutární a ostatní fondy"
+                            }
+                        }
+                    },
+                    "95": {
+                        "name": "Výsledek hospodaření minulých let (+/-)",
+                        "sub_rows": {
+                            "96": {
+                                "name": "Nerozdělený zisk minulých let"
+                            },
+                            "97": {
+                                "name": "Neuhrazená ztráta minulých let (-)"
+                            },
+                            "98": {
+                                "name": "Jiný výsledek hospodaření minulých let (+/-)"
+                            }
+                        }
+                    },
+                    "99": {
+                        "name": "Výsledek hospodaření běžného účetního období (+/-)"
+                    },
+                    "100": {
+                        "name": "Rozhodnuto o zálohové výplatě podílu na zisku (-)"
+                    }
+                }
+            },
+            "101": {
+                "name": "Cizí zdroje",
+                "sub_rows": {
+                    "102": {
+                        "name": "Rezervy",
+                        "sub_rows": {
+                            "103": {
+                                "name": "Rezerva na důchody a podobné závazky"
+                            },
+                            "104": {
+                                "name": "Rezerva na daň z příjmů"
+                            },
+                            "105": {
+                                "name": "Rezervy podle zvláštních právních předpisů"
+                            },
+                            "106": {
+                                "name": "Ostatní rezervy"
+                            }
+                        }
+                    },
+                    "107": {
+                        "name": "Závazky",
+                        "sub_rows": {
+                            "108": {
+                                "name": "Dlouhodobé závazky",
+                                "sub_rows": {
+                                    "109": {
+                                        "name": "Vydané dluhopisy",
+                                        "sub_rows": {
+                                            "110": {
+                                                "name": "Vyměnitelné dluhopisy"
+                                            },
+                                            "111": {
+                                                "name": "Ostatní dluhopisy"
+                                            }
+                                        }
+                                    },
+                                    "112": {
+                                        "name": "Závazky k úvěrovým institucím"
+                                    },
+                                    "113": {
+                                        "name": "Dlouhodobé přijaté zálohy"
+                                    },
+                                    "114": {
+                                        "name": "Závazky z obchodních vztahů"
+                                    },
+                                    "115": {
+                                        "name": "Dlouhodobé směnky k úhradě"
+                                    },
+                                    "116": {
+                                        "name": "Závazky - ovládaná nebo ovládající osoba"
+                                    },
+                                    "117": {
+                                        "name": "Závazky - podstatný vliv"
+                                    },
+                                    "118": {
+                                        "name": "Odložený daňový závazek"
+                                    },
+                                    "119": {
+                                        "name": "Závazky - ostatní",
+                                        "sub_rows": {
+                                            "120": {
+                                                "name": "Závazky ke společníkům"
+                                            },
+                                            "121": {
+                                                "name": "Dohadné účty pasivní"
+                                            },
+                                            "122": {
+                                                "name": "Jiné závazky"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "123": {
+                                "name": "Krátkodobé závazky",
+                                "sub_rows": {
+                                    "124": {
+                                        "name": "Vydané dluhopisy",
+                                        "sub_rows": {
+                                            "125": {
+                                                "name": "Vyměnitelné dluhopisy"
+                                            },
+                                            "126": {
+                                                "name": "Ostatní dluhopisy"
+                                            }
+                                        }
+                                    },
+                                    "127": {
+                                        "name": "Závazky k úvěrovým institucím"
+                                    },
+                                    "128": {
+                                        "name": "Krátkodobé přijaté zálohy"
+                                    },
+                                    "129": {
+                                        "name": "Závazky z obchodních vztahů"
+                                    },
+                                    "130": {
+                                        "name": "Krátkodobé směnky k úhradě"
+                                    },
+                                    "131": {
+                                        "name": "Závazky - ovládaná nebo ovládající osoba"
+                                    },
+                                    "132": {
+                                        "name": "Závazky - podstatný vliv"
+                                    },
+                                    "133": {
+                                        "name": "Závazky ostatní",
+                                        "sub_rows": {
+                                            "134": {
+                                                "name": "Závazky ke společníkům"
+                                            },
+                                            "135": {
+                                                "name": "Krátkodobé finanční výpomoci"
+                                            },
+                                            "136": {
+                                                "name": "Závazky k zaměstnancům"
+                                            },
+                                            "137": {
+                                                "name": "Závazky ze soc. zabezp. a zdravotního p."
+                                            },
+                                            "138": {
+                                                "name": "Stát - daňové závazky a dotace"
+                                            },
+                                            "139": {
+                                                "name": "Dohadné účty pasivní"
+                                            },
+                                            "140": {
+                                                "name": "Jiné závazky"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "141": {
+                "name": "Časové rozlišení",
+                "sub_rows": {
+                    "142": {
+                        "name": "Výdaje příštích období"
+                    },
+                    "143": {
+                        "name": "Výnosy příštích období"
+                    }
+                }
+            }
+        }
+    }
+}

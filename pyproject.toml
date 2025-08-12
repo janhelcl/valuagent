@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "valuagent"
+version = "0.1.0"
+description = ""
+authors = ["Jan Helcl"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^2.0.0"
+google-genai = "^1.26.0"
+python-dotenv = "^1.1.1"
+jupyterlab = "^4.4.5"
+ipykernel = "^6.30.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

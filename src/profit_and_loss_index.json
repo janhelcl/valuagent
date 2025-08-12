@@ -1,0 +1,194 @@
+{
+    "1": {
+        "name": "Tržby z prodeje výrobků a služeb"
+    },
+    "2": {
+        "name": "Tržby za prodej zboží"
+    },
+    "3": {
+        "name": "Výkonová spotřeba",
+        "sub_rows": {
+            "4": {
+                "name": "Náklady vynaložené na prodané zboží"
+            },
+            "5": {
+                "name": "Spotřeba materiálu a energie"
+            },
+            "6": {
+                "name": "Služby"
+            }
+        }
+    },
+    "7": {
+        "name": "Změna stavu zásob vlastní činnosti (+/-)"
+    },
+    "8": {
+        "name": "Aktivace (-)"
+    },
+    "9": {
+        "name": "Osobní náklady",
+        "sub_rows": {
+            "10": {
+                "name": "Mzdové náklady"
+            },
+            "11": {
+                "name": "Náklady na soc. zabezpečení, zdravotní pojištění a ostatní náklady",
+                "sub_rows": {
+                    "12": {
+                        "name": "Náklady na sociální zabezpečení a zdravotní pojištění"
+                    },
+                    "13": {
+                        "name": "Ostatní náklady"
+                    }
+                }
+            }
+        }
+    },
+    "14": {
+        "name": "Úprava hodnot v provozní oblasti",
+        "sub_rows": {
+            "15": {
+                "name": "Úpravy hodnot dlouhodobého nehmotného a hmotného majetku",
+                "sub_rows": {
+                    "16": {
+                        "name": "Úpravy hodnot dlouhodobého nehmotného a hmotného majetku - trvalé"
+                    },
+                    "17": {
+                        "name": "Úpravy hodnot dlouhodobého nehmotného a hmotného majetku - dočasné"
+                    }
+                }
+            },
+            "18": {
+                "name": "Úprava hodnot zásob"
+            },
+            "19": {
+                "name": "Úprava hodnot pohledávek"
+            }
+        }
+    },
+    "20": {
+        "name": "Ostatní provozní výnosy",
+        "sub_rows": {
+            "21": {
+                "name": "Tržby z prodaného dlouhodobého majetku"
+            },
+            "22": {
+                "name": "Tržby z prodaného materiálu"
+            },
+            "23": {
+                "name": "Jiné provozní výnosy"
+            }
+        }
+    },
+    "24": {
+        "name": "Ostatní provozní náklady",
+        "sub_rows": {
+            "25": {
+                "name": "Zůstatková cena prodaného dlouhodobého majetku"
+            },
+            "26": {
+                "name": "Zůstatková cena prodaného materiálu"
+            },
+            "27": {
+                "name": "Daně a poplatky v provozní oblasti"
+            },
+            "28": {
+                "name": "Rezervy v provozní oblasti a komplexní náklady příštích období"
+            },
+            "29": {
+                "name": "Jiné provozní náklady"
+            }
+        }
+    },
+    "30": {
+        "name": "PROVOZNÍ VÝSLEDEK HOSPODAŘENÍ (+/-)"
+    },
+    "31": {
+        "name": "Výnosy z dlouhodobého finančního majetku - podíly",
+        "sub_rows": {
+            "32": {
+                "name": "Výnosy z podílů - ovládaná nebo ovládající osoba"
+            },
+            "33": {
+                "name": "Ostatní výnosy z podílů"
+            }
+        }
+    },
+    "34": {
+        "name": "Náklady vynaložené na prodané podíly"
+    },
+    "35": {
+        "name": "Výnosy z ostatního dlouhodobého finančního majetku",
+        "sub_rows": {
+            "36": {
+                "name": "Výnosy z ostatního dlouh. finančního majetku - ovládaná nebo ovládající osoba"
+            },
+            "37": {
+                "name": "Ostatní výnosy z ostatního dlouhodobého finančního majetku"
+            }
+        }
+    },
+    "38": {
+        "name": "Náklady související s ostatním dlouhodobým finančním majetkem"
+    },
+    "39": {
+        "name": "Výnosové úroky a podobné výnosy",
+        "sub_rows": {
+            "40": {
+                "name": "Výnosové úroky a podobné výnosy - ovládaná nebo ovládající osoba"
+            },
+            "41": {
+                "name": "Ostatní výnosové úroky a podobné výnosy"
+            }
+        }
+    },
+    "42": {
+        "name": "Úpravy hodnot a rezervy ve finanční oblasti"
+    },
+    "43": {
+        "name": "Nákladové úroky a podobné náklady",
+        "sub_rows": {
+            "44": {
+                "name": "Nákladové úroky a podobné náklady - ovládaná nebo ovládající osoba"
+            },
+            "45": {
+                "name": "Ostatní nákl. úroky a podobné náklady"
+            }
+        }
+    },
+    "46": {
+        "name": "Ostatní finanční výnosy"
+    },
+    "47": {
+        "name": "Ostatní finanční náklady"
+    },
+    "48": {
+        "name": "FINANČNÍ VÝSLEDEK HOSPODAŘENÍ (+/-)"
+    },
+    "49": {
+        "name": "Výsledek hospodaření před zdaněním"
+    },
+    "50": {
+        "name": "Daň z příjmů",
+        "sub_rows": {
+            "51": {
+                "name": "Daň z příjmů splatná"
+            },
+            "52": {
+                "name": "Daň z příjmů odložená (+/-)"
+            }
+        }
+    },
+    "53": {
+        "name": "Výsledek hospodaření po zdanění (+/-)"
+    },
+    "54": {
+        "name": "Převod podílu na výsledku hospodaření společníkům (+/-)"
+    },
+    "55": {
+        "name": "VÝSLEDEK HOSPODAŘENÍ ZA ÚČETNÍ OBDOBÍ (+/-)"
+    },
+    "56": {
+        "name": "Čistý obrat za účetní období"
+    }
+}
