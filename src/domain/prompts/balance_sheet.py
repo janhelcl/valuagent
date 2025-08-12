@@ -1,13 +1,10 @@
 from string import Template
 
-from src import utils
+from src.shared import utils
 
 
 BALANCE_SHEET_INDEX = utils.index_to_string(
     utils.read_balance_sheet_index()
-)
-PROFIT_AND_LOSS_INDEX = utils.index_to_string(
-    utils.read_profit_and_loss_index()
 )
 
 balance_sheet_ocr_instructions = Template("""
@@ -55,34 +52,3 @@ Formát:
 """).safe_substitute(balance_sheet_index=BALANCE_SHEET_INDEX)
 
 
-profit_and_loss_ocr_instructions = Template("""
-Najdi v přiloženém PDF účetní výkaz zisku a ztráty a indentifikuj jeho jednotlivé položky.
-
-Existují následující položky:
-Označení Položka
-${profit_and_loss_index}
-
-Každá položka je sumou položek o jeden indent hlouběji.
-Dej pozor na správné znaménko u jednotlivých položek. Kladná čísla vracej jako kladná, záporná čísla vracej jako záporná.
-Dej pozor v jakých jednotkách je výkaz vyjádřen. Použij stejné jednotky ve výstupu.
-
-Některé položky můžou ve výkazu zisku a ztráty chybět, pokud tomu tak je, vrať hodnoty 0.
-Ke každé položce potřebujeme současné a minulé období.
-
-Vracíš pouze json, nic jiného.
-Formát:
-{
-    "rok": 2024,
-    "data": {
-        "1": {
-            "současné": 100000,
-            "minulé": 80000
-        },
-        "2": {
-            "současné": 50000,
-            "minulé": 40000
-        },
-        ...
-    }
-}
-""").safe_substitute(profit_and_loss_index=PROFIT_AND_LOSS_INDEX)

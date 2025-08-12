@@ -36,3 +36,5 @@ def export_excel(statement_type: str, model) -> io.BytesIO:
     wb.save(buf)
     buf.seek(0)
     return buf
+
+

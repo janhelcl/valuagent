@@ -34,4 +34,4 @@ poetry run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Notes
 
-- JSON is validated with Pydantic models in `src/schemas.py` with hierarchical and formula rules. Excel export includes a validation report sheet.
+- JSON is validated with Pydantic models in `src/domain/models` (split into `balance_sheet.py`, `profit_and_loss.py`, and `rules.py`). Excel export includes a validation report sheet.

@@ -4,7 +4,7 @@ from typing import Optional
 def generate_json_from_pdf(pdf_bytes: bytes, prompt: str, model: Optional[str] = None, api_key: Optional[str] = None) -> str:
     from google import genai
     from google.genai import types
-    from src import config
+    from src.infrastructure import config
 
     api_key = api_key or config.get_api_key()
     model = model or config.get_model()
@@ -21,3 +21,5 @@ def generate_json_from_pdf(pdf_bytes: bytes, prompt: str, model: Optional[str] =
         },
     )
     return response.text or ""
+
+

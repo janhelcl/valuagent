@@ -1,6 +1,2 @@
-from fastapi import FastAPI
-
-from src.api.routes import router
-
-app = FastAPI(title="Valuagent API", version="0.1.0")
-app.include_router(router)
+"""Compatibility entrypoint; prefer src.app.main:app."""
+from src.app.main import app  # re-export for uvicorn
