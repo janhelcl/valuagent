@@ -14,14 +14,16 @@ poetry install
 
 ```bash
 set GOOGLE_API_KEY=your_key_here
-set GENAI_MODEL=gemini-2.0-flash-exp
+set GENAI_MODEL=gemini-2.5-pro
 ```
 
 3) Start the API:
 
 ```bash
-poetry run uvicorn src.server:app --reload --host 0.0.0.0 --port 8000
+poetry run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+(Alternatively for backward compatibility: `poetry run uvicorn src.server:app --reload --host 0.0.0.0 --port 8000`)
 
 4) Open in browser: http://localhost:8000 and upload a PDF.
 
