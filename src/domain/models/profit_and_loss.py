@@ -82,7 +82,16 @@ class ProfitAndLoss(BaseModel):
             report.append(f"Field: {field}")
             report.append("-" * 20)
             for i, rule in enumerate(PREDEFINED_PL_VALIDATION_RULES, 1):
-                report.append(f"Hierarchical Rule {i}: Row {rule.target_row} = {' + '.join(str(r) for r in rule.source_rows)}")
+                # FlexibleValidationRule has source_expressions, not source_rows
+                expression_parts = []
+                for row_number, operation in rule.source_expressions:
+                    op_symbol = "+" if operation > 0 else "-"
+                    if len(expression_parts) == 0 and operation > 0:
+                        expression_parts.append(str(row_number))
+                    else:
+                        expression_parts.append(f"{op_symbol}{row_number}")
+                expression_str = "".join(expression_parts)
+                report.append(f"Hierarchical Rule {i}: Row {rule.target_row} = {expression_str}")
                 is_valid, error_msg = rule.validate_profit_and_loss(self.data, field=field, tolerance=self.tolerance)
                 status = "✓" if is_valid else "✗"
                 report.append(f"  {field}: {status}")
@@ -120,5 +129,3 @@ class ProfitAndLoss(BaseModel):
     @classmethod
     def from_ocr_with_tolerance(cls, ocr_data: dict, tolerance: int = 0):
         return cls.model_validate_with_tolerance(ocr_data, tolerance=tolerance)
-
-

@@ -25,7 +25,7 @@ def validate_payload(statement_type: str, data_dict: Dict[str, Any], tolerance: 
     return ProfitAndLoss.model_validate_with_tolerance(data_dict, tolerance=tolerance)
 
 
-def process_pdf_bytes(pdf_bytes: bytes, statement_type: str, year: int, tolerance: int):
+def process_pdf_bytes(pdf_bytes: bytes, statement_type: str, tolerance: int):
     prompt = pick_prompt(statement_type)
     text_response = generate_json_from_pdf(pdf_bytes, prompt)
     if not text_response:
@@ -36,6 +36,6 @@ def process_pdf_bytes(pdf_bytes: bytes, statement_type: str, year: int, toleranc
     except json.JSONDecodeError:
         data_dict = utils.load_json_from_text(text_response)
 
-    data_dict.setdefault("rok", year)
+
     model_obj = validate_payload(statement_type, data_dict, tolerance)
     return model_obj

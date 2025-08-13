@@ -29,7 +29,7 @@ INDEX_HTML = """
           <option value=\"vzz\">Výkaz zisku a ztráty</option>
         </select>
       </label>
-      <label>Year <input type=\"number\" name=\"year\" value=\"2024\" required /></label>
+
       <label>Tolerance <input type=\"number\" name=\"tolerance\" value=\"0\" /></label>
       <button type=\"submit\">Process</button>
     </form>
@@ -48,7 +48,6 @@ def index():
 async def process_pdf(
     pdf: UploadFile = File(...),
     statement_type: str = Form(...),
-    year: int = Form(...),
     tolerance: int = Form(0),
     return_json: bool = Form(False),
 ):
@@ -56,12 +55,12 @@ async def process_pdf(
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    model_obj = process_pdf_bytes(pdf_bytes, statement_type, year, tolerance)
+    model_obj = process_pdf_bytes(pdf_bytes, statement_type, tolerance)
     if return_json:
         return JSONResponse(model_obj.model_dump())
 
     excel_buffer = export_excel(statement_type, model_obj)
-    filename = f"valuagent_{statement_type}_{year}.xlsx"
+    filename = f"valuagent_{statement_type}_{model_obj.rok}.xlsx"
     return StreamingResponse(
         excel_buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

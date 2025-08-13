@@ -98,7 +98,9 @@ PREDEFINED_VALIDATION_RULES = _generate_predefined_rules()
 def _generate_predefined_pl_rules():
     try:
         rules_data = generate_profit_and_loss_validation_rules()
-        return [ValidationRule(target_row=target, source_rows=sources) for target, sources in rules_data]
+        # Convert to FlexibleValidationRule with positive operations for all source rows
+        return [FlexibleValidationRule(target_row=target, source_expressions=[(row, 1) for row in sources]) 
+                for target, sources in rules_data]
     except Exception:
         return []
 

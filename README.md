@@ -30,7 +30,7 @@ poetry run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ## API
 
 - `GET /` simple upload form
-- `POST /process` (multipart): `pdf`, `statement_type` (`rozvaha|vzz`), `year`, `tolerance`, optional `return_json=true`
+- `POST /process` (multipart): `pdf`, `statement_type` (`rozvaha|vzz`), `tolerance`, optional `return_json=true`
 
 ## Notes
 
