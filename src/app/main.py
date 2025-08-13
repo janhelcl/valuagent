@@ -69,3 +69,8 @@ app.mount("/static", StaticFiles(directory="src/app/static"), name="static")
 from src.app.api.routes import router  # noqa: E402  (after limiter definition)
 
 app.include_router(router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

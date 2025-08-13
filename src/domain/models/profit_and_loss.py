@@ -69,7 +69,7 @@ class ProfitAndLoss(BaseModel):
     def summary_report(self) -> str:
         report = [
             f"Profit and Loss Validation Report - Year {self.rok}",
-            "=" * 60,
+            "-" * 60,
             f"Total rows: {len(self.data)}",
             f"Hierarchical rules: {len(PREDEFINED_PL_VALIDATION_RULES)}",
             f"Flexible rules: {len(PREDEFINED_PL_FLEXIBLE_RULES)}",

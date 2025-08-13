@@ -14,5 +14,6 @@ RUN poetry config virtualenvs.create false \
 
 COPY . /app
 
+# Respect platform-provided PORT (Render sets this)
 ENV PORT=8080
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn src.app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

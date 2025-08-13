@@ -73,7 +73,7 @@ class BalanceSheet(BaseModel):
     def summary_report(self) -> str:
         report = [
             f"Balance Sheet Validation Report - Year {self.rok}",
-            "=" * 50,
+            "-" * 50,
             f"Total rows: {len(self.data)}",
             f"Validation rules: {len(PREDEFINED_VALIDATION_RULES)}",
             f"Tolerance: {self.tolerance}",
