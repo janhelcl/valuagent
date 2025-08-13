@@ -1,11 +1,37 @@
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+import os
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from src.infrastructure.exporters.excel import export_excel
 from src.services.process import process_pdf_bytes
 
 
 router = APIRouter()
+security = HTTPBasic()
+
+
+def is_authenticated(request: Request) -> bool:
+    return bool(request.session.get("auth"))
+
+
+def require_demo(request: Request, credentials: HTTPBasicCredentials = Depends(security)):
+    # Allow if previously authenticated via form/cookie
+    if is_authenticated(request):
+        return
+    demo_user = os.getenv("DEMO_USER", "demo")
+    demo_pass = os.getenv("DEMO_PASSWORD", "")
+    # If Authorization header is present, validate as Basic without redirect
+    if request.headers.get("authorization"):
+        if not (credentials.username == demo_user and credentials.password == demo_pass):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                headers={"WWW-Authenticate": "Basic"},
+                detail="Unauthorized",
+            )
+        return
+    # No session and no Authorization header → redirect to pretty login page
+    raise HTTPException(status_code=307, headers={"Location": "/login"}, detail="Redirect")
 
 INDEX_HTML = """
 <!DOCTYPE html>
@@ -270,17 +296,26 @@ INDEX_HTML = """
 
 
 @router.get("/", response_class=HTMLResponse)
-def index():
+def index(request: Request):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login")
     return HTMLResponse(INDEX_HTML)
 
 
+from src.app.main import limiter  # import limiter for decorators
+
+
 @router.post("/process")
+@limiter.limit("10/minute")
 async def process_pdf(
+    request: Request,
     pdf: UploadFile = File(...),
     statement_type: str = Form(...),
     tolerance: int = Form(1),
     return_json: bool = Form(False),
 ):
+    if not is_authenticated(request):
+        return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
     pdf_bytes = await pdf.read()
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -298,3 +333,72 @@ async def process_pdf(
     )
 
 
+
+# Pretty login page (form-based)
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang=\"cs\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Přihlášení – Valuagent</title>
+    <style>
+      :root { --bg:#0b1020; --card:#fff; --text:#0b1020; --muted:#5b6479; --primary:#2b6ef6; --ring: rgba(43,110,246,.3); }
+      html, body { height:100%; }
+      body { margin:0; padding:32px; display:grid; place-items:center; background: radial-gradient(1200px 600px at 20% -10%, #233161, transparent 60%), radial-gradient(1000px 600px at 100% 0%, #1f2a52, transparent 50%), var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+      .card { width: 100%; max-width: 480px; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(16,24,40,.18); }
+      .header { display:flex; align-items:center; gap:12px; color:#1e293b; margin-bottom:10px; }
+      .header img { height:48px; width:48px; border-radius:10px; background:#fff; padding:6px; }
+      h1 { font-size: 22px; margin:0; }
+      p { margin: 4px 0 0 0; color:#64748b; }
+      form { display:grid; gap:12px; margin-top:16px; }
+      label { color:#475569; font-size:14px; display:grid; gap:6px; }
+      input { border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; font-size:16px; }
+      input:focus { outline:none; border-color: var(--primary); box-shadow: 0 0 0 4px var(--ring); }
+      button { background: var(--primary); color:#fff; border:0; border-radius:10px; padding:10px 16px; font-weight:600; cursor:pointer; }
+      .hint { font-size:12px; color:#64748b; }
+      .error { color:#b91c1c; font-size:14px; }
+    </style>
+  </head>
+  <body>
+    <div class=\"card\">
+      <div class=\"header\">
+        <img src=\"/static/logo.png\" alt=\"Valuagent\" onerror=\"this.style.display='none'\" />
+        <div>
+          <h1>Přihlášení</h1>
+          <p>Použijte přístup pro demo.</p>
+        </div>
+      </div>
+      <form method=\"post\" action=\"/login\" autocomplete=\"off\">
+        <label>Uživatel <input type=\"text\" name=\"username\" value=\"demo\" required /></label>
+        <label>Heslo <input type=\"password\" name=\"password\" /></label>
+        <button type=\"submit\">Přihlásit</button>
+        <div class=\"hint\">Pokud nemáte přístup, kontaktujte nás.</div>
+      </form>
+    </div>
+  </body>
+ </html>
+"""
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    if is_authenticated(request):
+        return RedirectResponse(url="/")
+    return HTMLResponse(LOGIN_HTML)
+
+
+@router.post("/login")
+def login(request: Request, username: str = Form(...), password: str = Form("")):
+    demo_user = os.getenv("DEMO_USER", "demo")
+    demo_pass = os.getenv("DEMO_PASSWORD", "")
+    if username == demo_user and password == demo_pass:
+        request.session["auth"] = True
+        return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse(LOGIN_HTML.replace("</form>", "<div class=\"error\">Neplatné přihlašovací údaje</div></form>"), status_code=401)
+
+
+@router.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login")

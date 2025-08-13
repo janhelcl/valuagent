@@ -16,6 +16,9 @@ fastapi = "^0.115.0"
 uvicorn = {version = "^0.30.0", extras = ["standard"]}
 python-multipart = "^0.0.9"
 openpyxl = "^3.1.5"
+slowapi = "^0.1.9"
+google-cloud-logging = "^3.10.0"
+itsdangerous = "^2.2.0"
 
 
 [build-system]
