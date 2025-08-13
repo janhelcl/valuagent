@@ -15,12 +15,17 @@ INDEX_HTML = """
     <title>Valuagent</title>
     <style>
       body { font-family: system-ui, Arial, sans-serif; margin: 2rem; }
+      .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+      .logo { height: 60px; width: auto; }
       form { display: grid; gap: .75rem; max-width: 560px; }
       input, select, button { padding: .6rem; font-size: 1rem; }
     </style>
   </head>
   <body>
-    <h2>Valuagent – Extract and Validate</h2>
+    <div class="header">
+      <img src="/static/logo.png" alt="Valuagent Logo" class="logo" onerror="this.style.display='none'">
+      <h2>Valuagent – Extract and Validate</h2>
+    </div>
     <form id=\"f\" action=\"/process\" method=\"post\" enctype=\"multipart/form-data\">
       <label>PDF <input type=\"file\" name=\"pdf\" accept=\"application/pdf\" required /></label>
       <label>Statement type
