@@ -1,10 +1,12 @@
 import os
+import io
+import zipfile
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from src.infrastructure.exporters.excel import export_excel
-from src.services.process import process_pdf_bytes
+from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes
 
 
 router = APIRouter()
@@ -145,23 +147,15 @@ INDEX_HTML = """
           <p class="section-title">Nahrát</p>
           <form id="upload-form" action="/process" method="post" enctype="multipart/form-data" autocomplete="off">
             <label>
-              Soubor (PDF)
-              <input id="file-input" type="file" name="pdf" accept="application/pdf" required style="display:none" />
+              Soubory (PDF)
+              <input id="file-input" type="file" name="pdfs" accept="application/pdf" multiple required style="display:none" />
               <div id="dropzone" class="dropzone">
-                <strong>Přetáhněte sem PDF</strong>
+                <strong>Přetáhněte sem PDF soubory</strong>
                 <div class="hint">nebo klikněte pro výběr</div>
                 <div id="file-name" class="hint"></div>
               </div>
             </label>
-
-            <label>
-              Výkaz
-              <input type="hidden" name="statement_type" id="statement_type" value="rozvaha" />
-              <div class="segmented" role="group" aria-label="Typ výkazu">
-                <button type="button" class="is-active" data-value="rozvaha">Rozvaha</button>
-                <button type="button" data-value="vzz">VZZ</button>
-              </div>
-            </label>
+            <div class="hint">Typ výkazu bude rozpoznán automaticky (Rozvaha a/nebo VZZ) pro každý PDF soubor.</div>
 
             <details class="settings">
               <summary>Nastavení</summary>
@@ -209,14 +203,13 @@ INDEX_HTML = """
         const submitBtn = document.getElementById('submit-btn');
         const notice = document.getElementById('notice');
 
-        const showName = (file) => { fileName.textContent = file ? file.name : ''; };
-        const typeHidden = document.getElementById('statement_type');
-        const typeButtons = Array.from(document.querySelectorAll('.segmented button'));
-        typeButtons.forEach(btn => btn.addEventListener('click', () => {
-          typeButtons.forEach(b => b.classList.remove('is-active'));
-          btn.classList.add('is-active');
-          typeHidden.value = btn.dataset.value;
-        }));
+        const showNames = (files) => {
+          if (!files || files.length === 0) { fileName.textContent = ''; return; }
+          if (files.length === 1) { fileName.textContent = files[0].name; return; }
+          const names = Array.from(files).slice(0, 3).map(f => f.name);
+          const more = files.length > 3 ? ` (+${files.length - 3} více)` : '';
+          fileName.textContent = names.join(', ') + more;
+        };
         const setNotice = (message, type) => {
           notice.textContent = message || '';
           notice.className = 'notice' + (type ? ` notice--${type}` : '');
@@ -228,17 +221,14 @@ INDEX_HTML = """
         drop.addEventListener('drop', (e) => {
           e.preventDefault();
           drop.classList.remove('is-dragover');
-          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const file = e.dataTransfer.files[0];
-            if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-              input.files = e.dataTransfer.files;
-              showName(file);
-            } else {
-              alert('Nahrajte prosím soubor PDF.');
-            }
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const allPdf = Array.from(e.dataTransfer.files).every(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+            if (!allPdf) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
+            input.files = e.dataTransfer.files;
+            showNames(input.files);
           }
         });
-        input.addEventListener('change', () => showName(input.files[0]));
+        input.addEventListener('change', () => showNames(input.files));
 
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
@@ -265,7 +255,17 @@ INDEX_HTML = """
               return;
             }
 
-            if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+            if (contentType.includes('application/zip')) {
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const disposition = response.headers.get('content-disposition') || '';
+              const fileNameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+              const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent_results.zip';
+              const a = document.createElement('a');
+              a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
+              window.URL.revokeObjectURL(url);
+              setNotice('ZIP byl úspěšně stažen.', 'success');
+            } else if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
               const disposition = response.headers.get('content-disposition') || '';
@@ -309,27 +309,83 @@ from src.app.main import limiter  # import limiter for decorators
 @limiter.limit("10/minute")
 async def process_pdf(
     request: Request,
-    pdf: UploadFile = File(...),
-    statement_type: str = Form(...),
+    pdfs: list[UploadFile] = File(...),
     tolerance: int = Form(1),
     return_json: bool = Form(False),
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
-    pdf_bytes = await pdf.read()
-    if not pdf_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    model_obj = process_pdf_bytes(pdf_bytes, statement_type, tolerance)
+    # Read files and validate
+    file_payloads: list[tuple[str, bytes]] = []
+    for f in pdfs:
+        content = await f.read()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"Uploaded file '{f.filename}' is empty")
+        file_payloads.append((f.filename or "soubor.pdf", content))
+
+    results = []
+    for original_name, pdf_bytes in file_payloads:
+        info = disambiguate_pdf_bytes(pdf_bytes)
+        present_types: list[str] = []
+        if info.get("rozvaha"):
+            present_types.append("rozvaha")
+        if info.get("vzz"):
+            present_types.append("vzz")
+        if not present_types:
+            raise HTTPException(status_code=400, detail=f"Ve souboru '{original_name}' nebyl rozpoznán Rozvaha ani VZZ")
+
+        for st_type in present_types:
+            model_obj = process_pdf_bytes(pdf_bytes, st_type, tolerance)
+            results.append({
+                "original": original_name,
+                "statement_type": st_type,
+                "model": model_obj,
+            })
+
     if return_json:
-        return JSONResponse(model_obj.model_dump())
+        # Return compact JSON summary
+        payload = [
+            {
+                "file": r["original"],
+                "statement_type": r["statement_type"],
+                "rok": getattr(r["model"], "rok", None),
+                "rows": len(getattr(r["model"], "data", {})),
+            }
+            for r in results
+        ]
+        return JSONResponse(payload)
 
-    excel_buffer = export_excel(statement_type, model_obj)
-    filename = f"valuagent_{statement_type}_{model_obj.rok}.xlsx"
+    # If only one Excel, return it directly for convenience
+    if len(results) == 1:
+        r0 = results[0]
+        st_type = r0["statement_type"]
+        model_obj = r0["model"]
+        excel_buffer = export_excel(st_type, model_obj)
+        safe_name = (r0["original"] or "valuagent").rsplit(".", 1)[0]
+        filename = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
+        return StreamingResponse(
+            excel_buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    # Otherwise bundle into a ZIP
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for r in results:
+            st_type = r["statement_type"]
+            model_obj = r["model"]
+            excel_buffer = export_excel(st_type, model_obj)
+            safe_name = (r["original"] or "valuagent").rsplit(".", 1)[0]
+            arcname = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
+            zf.writestr(arcname, excel_buffer.getvalue())
+    zip_buf.seek(0)
+
     return StreamingResponse(
-        excel_buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
     )
 
 
