@@ -1,12 +1,15 @@
 import os
 import io
 import zipfile
+import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
+logger = logging.getLogger(__name__)
+
 from src.infrastructure.exporters.excel import export_excel
-from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes
+from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async
 
 
 router = APIRouter()
@@ -224,7 +227,7 @@ INDEX_HTML = """
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const allPdf = Array.from(e.dataTransfer.files).every(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
             if (!allPdf) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
-            input.files = e.dataTransfer.files;
+              input.files = e.dataTransfer.files;
             showNames(input.files);
           }
         });
@@ -259,7 +262,7 @@ INDEX_HTML = """
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
               const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
               const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent_results.zip';
               const a = document.createElement('a');
               a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
@@ -269,7 +272,7 @@ INDEX_HTML = """
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
               const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
               const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent.xlsx';
               const a = document.createElement('a');
               a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
@@ -318,30 +321,67 @@ async def process_pdf(
 
     # Read files and validate
     file_payloads: list[tuple[str, bytes]] = []
-    for f in pdfs:
+    logger.info(f"Processing {len(pdfs)} uploaded PDF files")
+    
+    for i, f in enumerate(pdfs):
         content = await f.read()
         if not content:
             raise HTTPException(status_code=400, detail=f"Uploaded file '{f.filename}' is empty")
-        file_payloads.append((f.filename or "soubor.pdf", content))
+        filename = f.filename or f"soubor_{i+1}.pdf"
+        file_payloads.append((filename, content))
+        logger.info(f"File {i+1}: {filename} ({len(content)/1024:.1f}KB)")
 
-    results = []
-    for original_name, pdf_bytes in file_payloads:
-        info = disambiguate_pdf_bytes(pdf_bytes)
+    import asyncio
+    
+    # Process all files concurrently using async
+    async def process_single_file(original_name: str, pdf_bytes: bytes):
+        logger.info(f"Starting processing of file: {original_name}")
+        
+        # First disambiguate what's in the file
+        info = await disambiguate_pdf_bytes_async(pdf_bytes)
         present_types: list[str] = []
         if info.get("rozvaha"):
             present_types.append("rozvaha")
         if info.get("vzz"):
             present_types.append("vzz")
         if not present_types:
+            logger.error(f"No statement types detected in {original_name}")
             raise HTTPException(status_code=400, detail=f"Ve souboru '{original_name}' nebyl rozpoznán Rozvaha ani VZZ")
 
+        logger.info(f"File {original_name} contains: {present_types}")
+
+        # Process each statement type concurrently
+        tasks = []
         for st_type in present_types:
-            model_obj = process_pdf_bytes(pdf_bytes, st_type, tolerance)
-            results.append({
+            logger.debug(f"Creating task for {original_name} - {st_type}")
+            tasks.append(process_pdf_bytes_async(pdf_bytes, st_type, tolerance))
+        
+        logger.info(f"Processing {len(tasks)} statement types for {original_name}")
+        models = await asyncio.gather(*tasks)
+        
+        file_results = []
+        for st_type, model_obj in zip(present_types, models):
+            file_results.append({
                 "original": original_name,
                 "statement_type": st_type,
                 "model": model_obj,
             })
+            logger.debug(f"Completed {st_type} for {original_name}")
+        
+        logger.info(f"Finished processing file: {original_name} ({len(file_results)} results)")
+        return file_results
+
+    # Process all files concurrently
+    logger.info(f"Starting concurrent processing of {len(file_payloads)} files")
+    file_tasks = [process_single_file(name, bytes_) for name, bytes_ in file_payloads]
+    file_results_lists = await asyncio.gather(*file_tasks)
+    
+    # Flatten the results
+    results = []
+    for file_results in file_results_lists:
+        results.extend(file_results)
+    
+    logger.info(f"All processing completed. Total results: {len(results)}")
 
     if return_json:
         # Return compact JSON summary
@@ -358,12 +398,14 @@ async def process_pdf(
 
     # If only one Excel, return it directly for convenience
     if len(results) == 1:
+        logger.info("Returning single Excel file")
         r0 = results[0]
         st_type = r0["statement_type"]
         model_obj = r0["model"]
         excel_buffer = export_excel(st_type, model_obj)
         safe_name = (r0["original"] or "valuagent").rsplit(".", 1)[0]
         filename = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
+        logger.info(f"Generated Excel file: {filename}")
         return StreamingResponse(
             excel_buffer,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -371,17 +413,20 @@ async def process_pdf(
         )
 
     # Otherwise bundle into a ZIP
+    logger.info(f"Creating ZIP file with {len(results)} Excel files")
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for r in results:
+        for i, r in enumerate(results):
             st_type = r["statement_type"]
             model_obj = r["model"]
+            logger.debug(f"Generating Excel {i+1}/{len(results)}: {r['original']} - {st_type}")
             excel_buffer = export_excel(st_type, model_obj)
             safe_name = (r["original"] or "valuagent").rsplit(".", 1)[0]
             arcname = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
             zf.writestr(arcname, excel_buffer.getvalue())
     zip_buf.seek(0)
 
+    logger.info(f"ZIP file created with {len(results)} files, size: {zip_buf.getbuffer().nbytes/1024:.1f}KB")
     return StreamingResponse(
         zip_buf,
         media_type="application/zip",

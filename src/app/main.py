@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 
 from fastapi import FastAPI, Request
@@ -7,19 +8,58 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+# Configure logging
+def setup_logging():
+    """Configure logging for the application."""
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Add console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+    
+    # Set specific logger levels for our modules
+    logging.getLogger("src.infrastructure.clients.genai_client").setLevel(log_level)
+    logging.getLogger("src.services.process").setLevel(log_level)
+    logging.getLogger("src.app.api.routes").setLevel(log_level)
+    
+    # Reduce noise from some third-party libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    
+    return logging.getLogger("valuagent")
+
+# Setup logging
+logger = setup_logging()
+
 # Optional Google Cloud Logging integration
 if os.getenv("ENABLE_GCLOUD_LOGGING") == "1":
     try:
         from google.cloud import logging as gcloud_logging  # type: ignore
-
         gcloud_logging.Client().setup_logging()
-    except Exception:
+        logger.info("Google Cloud Logging enabled")
+    except Exception as e:
+        logger.warning(f"Failed to setup Google Cloud Logging: {e}")
         # Fall back to standard logging if client not available
         pass
 
-
-# Basic structured access logging
-logger = logging.getLogger("valuagent")
+logger.info("Valuagent application starting up")
 
 
 # Rate limiting (SlowAPI)
