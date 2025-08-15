@@ -1,0 +1,418 @@
+{
+  "2": {
+    "netto": "4",
+    "name": "Pohledávky za upsaný základní kapitál"
+  },
+  "5": {
+    "netto": "8",
+    "name": "Nehmotné výsledky výzkumu a vývoje"
+  },
+  "7": {
+    "netto": "10",
+    "name": "Software"
+  },
+  "8": {
+    "netto": "11",
+    "name": "Ostatní ocenitelná práva"
+  },
+  "9": {
+    "netto": "12",
+    "name": "Goodwill"
+  },
+  "10": {
+    "netto": "13",
+    "name": "Ostatní dlouhodobý nehmotný majetek"
+  },
+  "12": {
+    "netto": "15",
+    "name": "Poskytnuté zálohy na dlouhodobý nehmotný majetek"
+  },
+  "13": {
+    "netto": "16",
+    "name": "Nedokončený dlouhodobý nehmotný majetek"
+  },
+  "16": {
+    "netto": "19",
+    "name": "Pozemky"
+  },
+  "17": {
+    "netto": "20",
+    "name": "Stavby"
+  },
+  "18": {
+    "netto": "21",
+    "name": "Hmotné movité věci a jejich soubory"
+  },
+  "19": {
+    "netto": "22",
+    "name": "Oceňovací rozdíl k nabytému majetku"
+  },
+  "21": {
+    "netto": "24",
+    "name": "Pěstitelské celky trvalých porostů"
+  },
+  "22": {
+    "netto": "25",
+    "name": "Dospělá zvířata a jejich skupiny"
+  },
+  "23": {
+    "netto": "26",
+    "name": "Jiný dlouhodobý hmotný majetek"
+  },
+  "25": {
+    "netto": "28",
+    "name": "Poskytnuté zálohy na dlouhodobý hmotný majetek"
+  },
+  "26": {
+    "netto": "29",
+    "name": "Nedokončený dlouhodobý hmotný majetek"
+  },
+  "28": {
+    "netto": "31",
+    "name": "Podíly - ovládaná nebo ovládající osoba"
+  },
+  "29": {
+    "netto": "32",
+    "name": "Zápůjčky a úvěry - ovládaná nebo ovládající osoba"
+  },
+  "30": {
+    "netto": "33",
+    "name": "Podíly - podstatný vliv"
+  },
+  "31": {
+    "netto": "34",
+    "name": "Zápůjčky a úvěry - podstatný vliv"
+  },
+  "32": {
+    "netto": "35",
+    "name": "Ostatní dlouhodobé cenné papíry a podíly"
+  },
+  "33": {
+    "netto": "36",
+    "name": "Zápůjčky a úvěry - ostatní"
+  },
+  "35": {
+    "netto": "38",
+    "name": "Jiný dlouhodobý finanční majetek"
+  },
+  "36": {
+    "netto": "39",
+    "name": "Poskytnuté zálohy na dlouhodobý finanční majetek"
+  },
+  "39": {
+    "netto": "42",
+    "name": "Materiál"
+  },
+  "40": {
+    "netto": "43",
+    "name": "Nedokončená výroba a polotovary"
+  },
+  "42": {
+    "netto": "45",
+    "name": "Výrobky"
+  },
+  "43": {
+    "netto": "46",
+    "name": "Zboží"
+  },
+  "44": {
+    "netto": "47",
+    "name": "Mladá a ostatní zvířata a jejich skupiny"
+  },
+  "45": {
+    "netto": "48",
+    "name": "Poskytnuté zálohy na zásoby"
+  },
+  "48": {
+    "netto": "51",
+    "name": "Pohledávky z obchodních vztahů"
+  },
+  "49": {
+    "netto": "52",
+    "name": "Pohledávky - ovládaná nebo ovládající osoba"
+  },
+  "50": {
+    "netto": "53",
+    "name": "Pohledávky - podstatný vliv"
+  },
+  "51": {
+    "netto": "54",
+    "name": "Odložená daňová pohledávka"
+  },
+  "53": {
+    "netto": "56",
+    "name": "Pohledávky za společníky"
+  },
+  "54": {
+    "netto": "57",
+    "name": "Dlouhodobé poskytnuté zálohy"
+  },
+  "55": {
+    "netto": "58",
+    "name": "Dohadné účty aktivní"
+  },
+  "56": {
+    "netto": "59",
+    "name": "Jiné pohledávky"
+  },
+  "58": {
+    "netto": "61",
+    "name": "Pohledávky z obchodních vztahů"
+  },
+  "59": {
+    "netto": "62",
+    "name": "Pohledávky - ovládaná nebo ovládající osoba"
+  },
+  "60": {
+    "netto": "63",
+    "name": "Pohledávky - podstatný vliv"
+  },
+  "62": {
+    "netto": "65",
+    "name": "Pohledávky za společníky"
+  },
+  "63": {
+    "netto": "66",
+    "name": "Sociální zabezpečení a zdravotní pojištění"
+  },
+  "64": {
+    "netto": "67",
+    "name": "Stát - daňové pohledávky"
+  },
+  "65": {
+    "netto": "68",
+    "name": "Krátkodobé poskytnuté zálohy"
+  },
+  "66": {
+    "netto": "69",
+    "name": "Dohadné účty aktivní"
+  },
+  "67": {
+    "netto": "70",
+    "name": "Jiné pohledávky"
+  },
+  "69": {
+    "netto": "72",
+    "name": "Podíly - ovládaná nebo ovládající osoba"
+  },
+  "70": {
+    "netto": "73",
+    "name": "Ostatní krátkodobý finanční majetek"
+  },
+  "72": {
+    "netto": "75",
+    "name": "Peněžní prostředky v pokladně"
+  },
+  "73": {
+    "netto": "76",
+    "name": "Peněžní prostředky na účtech"
+  },
+  "75": {
+    "netto": "78",
+    "name": "Náklady příštích období"
+  },
+  "76": {
+    "netto": "79",
+    "name": "Komplexní náklady příštích období"
+  },
+  "77": {
+    "netto": "80",
+    "name": "Příjmy příštích období"
+  },
+  "81": {
+    "netto": "92",
+    "name": "Základní kapitál"
+  },
+  "82": {
+    "netto": "93",
+    "name": "Vlastní podíly (-)"
+  },
+  "83": {
+    "netto": "94",
+    "name": "Změny základního kapitálu"
+  },
+  "85": {
+    "netto": "96",
+    "name": "Ážio"
+  },
+  "87": {
+    "netto": "98",
+    "name": "Ostatní kapitálové fondy"
+  },
+  "88": {
+    "netto": "99",
+    "name": "Oceňovací rozdíly z přecenění majetku a závazků (+/-)"
+  },
+  "89": {
+    "netto": "100",
+    "name": "Oceňovací rozdíly z přecenění při přeměnách obchodních korporací (+/-)"
+  },
+  "90": {
+    "netto": "101",
+    "name": "Rozdíly z přeměn obchodních korporací (+/-)"
+  },
+  "91": {
+    "netto": "102",
+    "name": "Rozdíly z ocenění při přeměnách obchodních korporací (+/-)"
+  },
+  "93": {
+    "netto": "104",
+    "name": "Ostatní rezervní fondy"
+  },
+  "94": {
+    "netto": "105",
+    "name": "Statutární a ostatní fondy"
+  },
+  "96": {
+    "netto": "107",
+    "name": "Nerozdělený zisk minulých let"
+  },
+  "97": {
+    "netto": "108",
+    "name": "Neuhrazená ztráta minulých let (-)"
+  },
+  "98": {
+    "netto": "109",
+    "name": "Jiný výsledek hospodaření minulých let (+/-)"
+  },
+  "99": {
+    "netto": "110",
+    "name": "Výsledek hospodaření běžného účetního období (+/-)"
+  },
+  "100": {
+    "netto": "111",
+    "name": "Rozhodnuto o zálohové výplatě podílu na zisku (-)"
+  },
+  "103": {
+    "netto": "114",
+    "name": "Rezerva na důchody a podobné závazky"
+  },
+  "104": {
+    "netto": "115",
+    "name": "Rezerva na daň z příjmů"
+  },
+  "105": {
+    "netto": "116",
+    "name": "Rezervy podle zvláštních právních předpisů"
+  },
+  "106": {
+    "netto": "117",
+    "name": "Ostatní rezervy"
+  },
+  "110": {
+    "netto": "121",
+    "name": "Vyměnitelné dluhopisy"
+  },
+  "111": {
+    "netto": "122",
+    "name": "Ostatní dluhopisy"
+  },
+  "112": {
+    "netto": "123",
+    "name": "Závazky k úvěrovým institucím"
+  },
+  "113": {
+    "netto": "124",
+    "name": "Dlouhodobé přijaté zálohy"
+  },
+  "114": {
+    "netto": "125",
+    "name": "Závazky z obchodních vztahů"
+  },
+  "115": {
+    "netto": "126",
+    "name": "Dlouhodobé směnky k úhradě"
+  },
+  "116": {
+    "netto": "127",
+    "name": "Závazky - ovládaná nebo ovládající osoba"
+  },
+  "117": {
+    "netto": "128",
+    "name": "Závazky - podstatný vliv"
+  },
+  "118": {
+    "netto": "129",
+    "name": "Odložený daňový závazek"
+  },
+  "120": {
+    "netto": "131",
+    "name": "Závazky ke společníkům"
+  },
+  "121": {
+    "netto": "132",
+    "name": "Dohadné účty pasivní"
+  },
+  "122": {
+    "netto": "133",
+    "name": "Jiné závazky"
+  },
+  "125": {
+    "netto": "136",
+    "name": "Vyměnitelné dluhopisy"
+  },
+  "126": {
+    "netto": "137",
+    "name": "Ostatní dluhopisy"
+  },
+  "127": {
+    "netto": "138",
+    "name": "Závazky k úvěrovým institucím"
+  },
+  "128": {
+    "netto": "139",
+    "name": "Krátkodobé přijaté zálohy"
+  },
+  "129": {
+    "netto": "140",
+    "name": "Závazky z obchodních vztahů"
+  },
+  "130": {
+    "netto": "141",
+    "name": "Krátkodobé směnky k úhradě"
+  },
+  "131": {
+    "netto": "142",
+    "name": "Závazky - ovládaná nebo ovládající osoba"
+  },
+  "132": {
+    "netto": "143",
+    "name": "Závazky - podstatný vliv"
+  },
+  "134": {
+    "netto": "145",
+    "name": "Závazky ke společníkům"
+  },
+  "135": {
+    "netto": "146",
+    "name": "Krátkodobé finanční výpomoci"
+  },
+  "136": {
+    "netto": "147",
+    "name": "Závazky k zaměstnancům"
+  },
+  "137": {
+    "netto": "148",
+    "name": "Závazky ze soc. zabezp. a zdravotního p."
+  },
+  "138": {
+    "netto": "149",
+    "name": "Stát - daňové závazky a dotace"
+  },
+  "139": {
+    "netto": "150",
+    "name": "Dohadné účty pasivní"
+  },
+  "140": {
+    "netto": "151",
+    "name": "Jiné závazky"
+  },
+  "142": {
+    "netto": "153",
+    "name": "Výdaje příštích období"
+  },
+  "143": {
+    "netto": "154",
+    "name": "Výnosy příštích období"
+  }
+}
