@@ -78,7 +78,7 @@ def get_sorted_balance_sheets(results: List[Dict[str, Any]]) -> List[Dict[str, A
     return balance_sheets
 
 
-def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result: Dict[str, Any]) -> None:
+def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result: Dict[str, Any], disambiguation_info: Dict[str, Any] = None) -> None:
     """Fill the Předmět ocenění sheet with balance sheet data."""
     sheet_name = "Předmět oce"
     
@@ -92,6 +92,27 @@ def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result
     if not mapping:
         logger.warning("No mapping data available, skipping sheet fill")
         return
+    
+    # Fill date cells E2, F2, G2, H2 with disambiguation date
+    if disambiguation_info and disambiguation_info.get("datum"):
+        date_str = disambiguation_info["datum"]
+        try:
+            # Parse the date (expected format: YYYY-MM-DD)
+            from datetime import datetime
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d.%m.%Y")
+            
+            # Fill all date cells
+            date_cells = ["E2", "F2", "G2", "H2"]
+            for cell in date_cells:
+                sheet[cell] = formatted_date
+                logger.debug(f"Set date cell {cell} = {formatted_date}")
+            
+            logger.info(f"Filled date cells with {formatted_date}")
+        except ValueError as e:
+            logger.warning(f"Could not parse date '{date_str}': {e}")
+    else:
+        logger.debug("No disambiguation date available for Předmět ocenění sheet")
     
     balance_sheet = balance_sheet_result["model"]
     balance_data = getattr(balance_sheet, "data", {})
@@ -159,6 +180,12 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
         logger.warning("No balance sheet results available for Rozvaha sheet")
         return
     
+    # Fill latest year in J3 (latest year from Předmět ocenění)
+    latest_year = getattr(balance_sheet_results[0]["model"], "rok", "")
+    if latest_year:
+        sheet["J3"] = latest_year
+        logger.debug(f"Set latest year header J3 = {latest_year}")
+    
     # Column mapping: I = 2nd latest, H = 3rd latest, G = 4th latest, F = 5th latest
     year_columns = ['I', 'H', 'G', 'F']
     max_years = len(year_columns)
@@ -166,34 +193,61 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     # Skip the latest year (already in Předmět ocenění), take up to 4 historical years
     historical_balance_sheets = balance_sheet_results[1:max_years+1]
     
-    if not historical_balance_sheets:
+    # Prepare data sources: each entry is (balance_sheet_result, year, data_source)
+    # data_source can be 'netto' or 'netto_minule'
+    data_sources = []
+    
+    # Add historical balance sheets with their netto values
+    for bs in historical_balance_sheets:
+        year = getattr(bs["model"], "rok", 0)
+        data_sources.append((bs, year, 'netto'))
+    
+    # If we have room left, add netto_minule values from available balance sheets
+    remaining_columns = max_years - len(data_sources)
+    if remaining_columns > 0:
+        # Use netto_minule from balance sheets to fill additional years
+        # Start from the beginning but avoid duplicating years we already have
+        existing_years = {year for _, year, _ in data_sources}
+        
+        for bs in balance_sheet_results:
+            if remaining_columns <= 0:
+                break
+            year = getattr(bs["model"], "rok", 0) - 1  # netto_minule is previous year
+            if year > 0 and year not in existing_years:  # Only if valid and not duplicate
+                data_sources.append((bs, year, 'netto_minule'))
+                existing_years.add(year)
+                remaining_columns -= 1
+    
+    # Sort by year descending (newest first) and take only what fits
+    data_sources.sort(key=lambda x: x[1], reverse=True)
+    data_sources = data_sources[:max_years]
+    
+    if not data_sources:
         logger.info("No historical balance sheet data available for Rozvaha sheet")
         return
     
-    logger.info(f"Filling Rozvaha sheet with {len(historical_balance_sheets)} historical years")
+    logger.info(f"Filling Rozvaha sheet with {len(data_sources)} years of historical data")
     
     # Fill year headers in row 3
-    for i, balance_sheet_result in enumerate(historical_balance_sheets):
+    for i, (balance_sheet_result, year, data_source) in enumerate(data_sources):
         column = year_columns[i]
-        year = getattr(balance_sheet_result["model"], "rok", "")
         year_cell = f"{column}3"
         sheet[year_cell] = year
-        logger.debug(f"Set year header {year_cell} = {year}")
+        logger.debug(f"Set year header {year_cell} = {year} (from {data_source})")
     
     # Fill data for each year
     total_filled = 0
     total_missing = 0
     
-    for year_idx, balance_sheet_result in enumerate(historical_balance_sheets):
+    for year_idx, (balance_sheet_result, year, data_source) in enumerate(data_sources):
         column = year_columns[year_idx]
         balance_sheet = balance_sheet_result["model"]
         balance_data = getattr(balance_sheet, "data", {})
-        year = getattr(balance_sheet, "rok", "unknown")
         
         filled_count = 0
         missing_count = 0
         
-        logger.debug(f"Filling column {column} with year {year} data ({len(balance_data)} rows)")
+        logger.debug(f"Filling column {column} with year {year} data from {data_source} ({len(balance_data)} rows)")
         
         for row_id, row_data in balance_data.items():
             row_id_str = str(row_id)
@@ -213,14 +267,20 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                 continue
             
             try:
-                # Fill netto value
-                if hasattr(row_data, "netto"):
+                # Get the value based on data source
+                value = None
+                if data_source == 'netto' and hasattr(row_data, "netto"):
+                    value = row_data.netto
+                elif data_source == 'netto_minule' and hasattr(row_data, "netto_minule"):
+                    value = row_data.netto_minule
+                
+                if value is not None:
                     cell_address = f"{column}{excel_row}"
-                    sheet[cell_address] = row_data.netto
-                    logger.debug(f"Set {cell_address} = {row_data.netto} (netto for {row_name})")
+                    sheet[cell_address] = value
+                    logger.debug(f"Set {cell_address} = {value} ({data_source} for {row_name})")
                     filled_count += 1
                 else:
-                    logger.debug(f"No netto value for row {row_id} ({row_name})")
+                    logger.debug(f"No {data_source} value for row {row_id} ({row_name})")
                     missing_count += 1
                     
             except Exception as e:
@@ -228,14 +288,14 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                 missing_count += 1
                 continue
         
-        logger.info(f"Column {column} (year {year}): filled {filled_count} rows, {missing_count} missing")
+        logger.info(f"Column {column} (year {year} from {data_source}): filled {filled_count} rows, {missing_count} missing")
         total_filled += filled_count
         total_missing += missing_count
     
     logger.info(f"Successfully filled Rozvaha sheet: {total_filled} total values, {total_missing} total missing")
 
 
-def export_dcf_template(results: List[Dict[str, Any]]) -> io.BytesIO:
+def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict[str, Any] = None) -> io.BytesIO:
     """Export results to DCF template, filling Předmět ocenění and Rozvaha sheets."""
     logger.info(f"Creating DCF template export from {len(results)} results")
     
@@ -257,9 +317,9 @@ def export_dcf_template(results: List[Dict[str, Any]]) -> io.BytesIO:
         logger.error("No balance sheet data found in results")
         raise ValueError("No balance sheet data found in results")
     
-    # Fill Předmět ocenění sheet with latest year
+    # Fill Předmět ocenění sheet with latest year and disambiguation date
     latest_balance_sheet = sorted_balance_sheets[0]
-    fill_predmet_oceneni_sheet(workbook, latest_balance_sheet)
+    fill_predmet_oceneni_sheet(workbook, latest_balance_sheet, disambiguation_info)
     
     # Fill Rozvaha sheet with historical years (skip latest)
     if len(sorted_balance_sheets) > 1:

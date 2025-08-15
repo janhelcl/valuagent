@@ -366,6 +366,7 @@ async def process_pdf(
                 "original": original_name,
                 "statement_type": st_type,
                 "model": model_obj,
+                "disambiguation_info": info,  # Add disambiguation info to results
             })
             logger.debug(f"Completed {st_type} for {original_name}")
         
@@ -400,16 +401,19 @@ async def process_pdf(
     # Export using DCF template with Předmět ocenění sheet filled
     try:
         logger.info("Creating DCF template export")
-        dcf_buffer = export_dcf_template(results)
         
-        # Generate filename based on latest balance sheet year
+        # Get disambiguation info from the latest balance sheet result
         balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
+        disambiguation_info = None
         if balance_sheets:
             latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+            disambiguation_info = latest_bs.get("disambiguation_info")
             year = getattr(latest_bs["model"], "rok", "")
             filename = f"DCF_valuagent_{year}.xlsx"
         else:
             filename = "DCF_valuagent.xlsx"
+        
+        dcf_buffer = export_dcf_template(results, disambiguation_info)
         
         logger.info(f"Generated DCF template: {filename}")
         return StreamingResponse(
@@ -458,7 +462,7 @@ async def process_pdf(
             zip_buf,
             media_type="application/zip",
             headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
-        )
+    )
 
 
 
