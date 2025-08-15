@@ -45,6 +45,24 @@ def load_rozvaha_mapping() -> Dict[str, Dict[str, str]]:
         return {}
 
 
+def load_vysledovka_mapping() -> Dict[str, Dict[str, str]]:
+    """Load the row mapping for Výsledovka sheet."""
+    resources_dir = Path(__file__).resolve().parent.parent / "resources"
+    mapping_path = resources_dir / "vysledovka_mapping.json"
+    
+    try:
+        with mapping_path.open("r", encoding="utf-8") as f:
+            mapping = json.load(f)
+        logger.info(f"Loaded vysledovka_mapping.json with {len(mapping)} row mappings")
+        return mapping
+    except FileNotFoundError:
+        logger.error(f"Mapping file not found: {mapping_path}")
+        return {}
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in mapping file: {e}")
+        return {}
+
+
 def find_latest_balance_sheet(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Find the balance sheet result with the latest year."""
     balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
@@ -76,6 +94,22 @@ def get_sorted_balance_sheets(results: List[Dict[str, Any]]) -> List[Dict[str, A
     logger.info(f"Found {len(balance_sheets)} balance sheets for years: {years}")
     
     return balance_sheets
+
+
+def get_sorted_profit_loss_statements(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get all profit and loss statements sorted by year (newest first)."""
+    profit_loss = [r for r in results if r["statement_type"] == "vzz"]
+    
+    if not profit_loss:
+        return []
+    
+    # Sort by year (rok) in descending order (newest first)
+    profit_loss.sort(key=lambda x: getattr(x["model"], "rok", 0), reverse=True)
+    
+    years = [getattr(pl["model"], "rok", "unknown") for pl in profit_loss]
+    logger.info(f"Found {len(profit_loss)} profit and loss statements for years: {years}")
+    
+    return profit_loss
 
 
 def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result: Dict[str, Any], disambiguation_info: Dict[str, Any] = None) -> None:
@@ -302,8 +336,133 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     logger.info(f"Successfully filled Rozvaha sheet: {total_filled} total values, {total_missing} total missing")
 
 
+def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List[Dict[str, Any]]) -> None:
+    """Fill the Výsledovka sheet with multiple years of profit and loss data."""
+    sheet_name = "Výsledovka"
+    
+    if sheet_name not in workbook.sheetnames:
+        logger.error(f"Sheet '{sheet_name}' not found in template. Available sheets: {workbook.sheetnames}")
+        raise ValueError(f"Sheet '{sheet_name}' not found in template")
+    
+    sheet = workbook[sheet_name]
+    mapping = load_vysledovka_mapping()
+    
+    if not mapping:
+        logger.warning("No Výsledovka mapping data available, skipping sheet fill")
+        return
+    
+    if not profit_loss_results:
+        logger.warning("No profit and loss results available for Výsledovka sheet")
+        return
+    
+    # Column mapping: J = latest, I = 2nd latest, H = 3rd latest, G = 4th latest, F = 5th latest
+    year_columns = ['J', 'I', 'H', 'G', 'F']
+    max_years = len(year_columns)
+    
+    # Prepare data sources: each entry is (profit_loss_result, year, data_source)
+    # data_source can be 'současné' or 'minulé'
+    data_sources = []
+    
+    # Add all profit and loss statements with their současné values
+    for pl in profit_loss_results[:max_years]:
+        year = getattr(pl["model"], "rok", 0)
+        data_sources.append((pl, year, 'současné'))
+    
+    # If we have room left, add minulé values from available profit and loss statements
+    remaining_columns = max_years - len(data_sources)
+    if remaining_columns > 0:
+        # Use minulé from profit and loss statements to fill additional years
+        # Start from the beginning but avoid duplicating years we already have
+        existing_years = {year for _, year, _ in data_sources}
+        
+        for pl in profit_loss_results:
+            if remaining_columns <= 0:
+                break
+            year = getattr(pl["model"], "rok", 0) - 1  # minulé is previous year
+            if year > 0 and year not in existing_years:  # Only if valid and not duplicate
+                data_sources.append((pl, year, 'minulé'))
+                existing_years.add(year)
+                remaining_columns -= 1
+    
+    # Sort by year descending (newest first) and take only what fits
+    data_sources.sort(key=lambda x: x[1], reverse=True)
+    data_sources = data_sources[:max_years]
+    
+    if not data_sources:
+        logger.info("No profit and loss data available for Výsledovka sheet")
+        return
+    
+    logger.info(f"Filling Výsledovka sheet with {len(data_sources)} years of data")
+    
+    # Fill data for each year
+    total_filled = 0
+    total_missing = 0
+    
+    for year_idx, (profit_loss_result, year, data_source) in enumerate(data_sources):
+        column = year_columns[year_idx]
+        profit_loss = profit_loss_result["model"]
+        profit_loss_data = getattr(profit_loss, "data", {})
+        
+        filled_count = 0
+        missing_count = 0
+        
+        logger.debug(f"Filling column {column} with year {year} data from {data_source} ({len(profit_loss_data)} rows)")
+        
+        for row_id, row_data in profit_loss_data.items():
+            row_id_str = str(row_id)
+            
+            if row_id_str not in mapping:
+                logger.debug(f"Row ID {row_id} not found in Výsledovka mapping, skipping")
+                missing_count += 1
+                continue
+            
+            cell_mapping = mapping[row_id_str]
+            row_name = cell_mapping.get("name", f"Row {row_id}")
+            excel_row = cell_mapping.get("netto")
+            
+            if not excel_row:
+                logger.warning(f"No row mapping found for row ID {row_id}")
+                missing_count += 1
+                continue
+            
+            try:
+                # Get the value based on data source
+                value = None
+                if data_source == 'současné' and hasattr(row_data, "současné"):
+                    value = row_data.současné
+                elif data_source == 'minulé' and hasattr(row_data, "minulé"):
+                    value = row_data.minulé
+                
+                if value is not None:
+                    cell_address = f"{column}{excel_row}"
+                    
+                    # Check if cell contains a formula - if so, skip it to preserve template logic
+                    existing_cell = sheet[cell_address]
+                    if existing_cell.data_type == 'f':  # 'f' means formula
+                        logger.debug(f"Skipping {cell_address} - contains formula: {existing_cell.value}")
+                        missing_count += 1
+                    else:
+                        sheet[cell_address] = value
+                        logger.debug(f"Set {cell_address} = {value} ({data_source} for {row_name})")
+                        filled_count += 1
+                else:
+                    logger.debug(f"No {data_source} value for row {row_id} ({row_name})")
+                    missing_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Error filling row {row_id} ({row_name}) in column {column}: {e}")
+                missing_count += 1
+                continue
+        
+        logger.info(f"Column {column} (year {year} from {data_source}): filled {filled_count} rows, {missing_count} missing")
+        total_filled += filled_count
+        total_missing += missing_count
+    
+    logger.info(f"Successfully filled Výsledovka sheet: {total_filled} total values, {total_missing} total missing")
+
+
 def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict[str, Any] = None) -> io.BytesIO:
-    """Export results to DCF template, filling Předmět ocenění and Rozvaha sheets."""
+    """Export results to DCF template, filling Předmět ocenění, Rozvaha, and Výsledovka sheets."""
     logger.info(f"Creating DCF template export from {len(results)} results")
     
     # Load the template
@@ -333,6 +492,13 @@ def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict
         fill_rozvaha_sheet(workbook, sorted_balance_sheets)
     else:
         logger.info("Only one balance sheet year available, skipping Rozvaha sheet historical data")
+    
+    # Fill Výsledovka sheet with profit and loss data
+    sorted_profit_loss = get_sorted_profit_loss_statements(results)
+    if sorted_profit_loss:
+        fill_vysledovka_sheet(workbook, sorted_profit_loss)
+    else:
+        logger.info("No profit and loss data available, skipping Výsledovka sheet")
     
     # Save to BytesIO buffer
     buffer = io.BytesIO()
