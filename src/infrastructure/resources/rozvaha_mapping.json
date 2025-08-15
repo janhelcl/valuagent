@@ -1,6 +1,6 @@
 {
   "2": {
-    "netto": "4",
+    "netto": "5",
     "name": "Pohledávky za upsaný základní kapitál"
   },
   "5": {
@@ -274,10 +274,6 @@
   "98": {
     "netto": "109",
     "name": "Jiný výsledek hospodaření minulých let (+/-)"
-  },
-  "99": {
-    "netto": "110",
-    "name": "Výsledek hospodaření běžného účetního období (+/-)"
   },
   "100": {
     "netto": "111",

@@ -276,9 +276,16 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                 
                 if value is not None:
                     cell_address = f"{column}{excel_row}"
-                    sheet[cell_address] = value
-                    logger.debug(f"Set {cell_address} = {value} ({data_source} for {row_name})")
-                    filled_count += 1
+                    
+                    # Check if cell contains a formula - if so, skip it to preserve template logic
+                    existing_cell = sheet[cell_address]
+                    if existing_cell.data_type == 'f':  # 'f' means formula
+                        logger.debug(f"Skipping {cell_address} - contains formula: {existing_cell.value}")
+                        missing_count += 1
+                    else:
+                        sheet[cell_address] = value
+                        logger.debug(f"Set {cell_address} = {value} ({data_source} for {row_name})")
+                        filled_count += 1
                 else:
                     logger.debug(f"No {data_source} value for row {row_id} ({row_name})")
                     missing_count += 1
