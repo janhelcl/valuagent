@@ -1,0 +1,166 @@
+{
+  "1": {
+    "netto": "4",
+    "name": "Tržby z prodeje výrobků a služeb"
+  },
+  "2": {
+    "netto": "5",
+    "name": "Tržby za prodej zboží"
+  },
+  "4": {
+    "netto": "7",
+    "name": "Náklady vynaložené na prodané zboží"
+  },
+  "5": {
+    "netto": "8",
+    "name": "Spotřeba materiálu a energie"
+  },
+  "6": {
+    "netto": "9",
+    "name": "Služby"
+  },
+  "7": {
+    "netto": "10",
+    "name": "Změna stavu zásob vlastní činnosti (+/-)"
+  },
+  "8": {
+    "netto": "11",
+    "name": "Aktivace (-)"
+  },
+  "10": {
+    "netto": "16",
+    "name": "Mzdové náklady"
+  },
+  "12": {
+    "netto": "18",
+    "name": "Náklady na sociální zabezpečení a zdravotní pojištění"
+  },
+  "13": {
+    "netto": "19",
+    "name": "Ostatní náklady"
+  },
+  "16": {
+    "netto": "22",
+    "name": "Úpravy hodnot dlouhodobého nehmotného a hmotného majetku - trvalé"
+  },
+  "17": {
+    "netto": "23",
+    "name": "Úpravy hodnot dlouhodobého nehmotného a hmotného majetku - dočasné"
+  },
+  "18": {
+    "netto": "24",
+    "name": "Úprava hodnot zásob"
+  },
+  "19": {
+    "netto": "25",
+    "name": "Úprava hodnot pohledávek"
+  },
+  "21": {
+    "netto": "27",
+    "name": "Tržby z prodaného dlouhodobého majetku"
+  },
+  "22": {
+    "netto": "28",
+    "name": "Tržby z prodaného materiálu"
+  },
+  "23": {
+    "netto": "29",
+    "name": "Jiné provozní výnosy"
+  },
+  "25": {
+    "netto": "31",
+    "name": "Zůstatková cena prodaného dlouhodobého majetku"
+  },
+  "26": {
+    "netto": "32",
+    "name": "Zůstatková cena prodaného materiálu"
+  },
+  "27": {
+    "netto": "33",
+    "name": "Daně a poplatky v provozní oblasti"
+  },
+  "28": {
+    "netto": "34",
+    "name": "Rezervy v provozní oblasti a komplexní náklady příštích období"
+  },
+  "29": {
+    "netto": "35",
+    "name": "Jiné provozní náklady"
+  },
+  "9991": {
+    "netto": "39",
+    "name": "Výnosy z podílů - ovládaná nebo ovládající osoba"
+  },
+  "9992": {
+    "netto": "40",
+    "name": "Tržby z prodeje cenných papírů a podílů ovládaná nebo ovládající osoba"
+  },
+  "9993": {
+    "netto": "42",
+    "name": "Ostatní výnosy z podílů"
+  },
+  "9994": {
+    "netto": "43",
+    "name": "Tržby z prodeje cenných papírů a ostatních podílů"
+  },
+  "34": {
+    "netto": "44",
+    "name": "Náklady vynaložené na prodané podíly"
+  },
+  "36": {
+    "netto": "46",
+    "name": "Výnosy z ostatního dlouhodobého finančního majetku - ovládaná nebo ovládající osoba"
+  },
+  "37": {
+    "netto": "47",
+    "name": "Ostatní výnosy z ostatního dlouhodobého finančního majetku"
+  },
+  "38": {
+    "netto": "48",
+    "name": "Náklady související s ostatním dlouhodobým finančním majetkem"
+  },
+  "40": {
+    "netto": "50",
+    "name": "Výnosové úroky a podobné výnosy - ovládaná nebo ovládající osoba"
+  },
+  "41": {
+    "netto": "51",
+    "name": "Ostatní výnosové úroky a podobné výnosy"
+  },
+  "42": {
+    "netto": "52",
+    "name": "Úpravy hodnot a rezervy ve finanční oblasti"
+  },
+  "44": {
+    "netto": "54",
+    "name": "Nákladové úroky a podobné náklady - ovládaná nebo ovládající osoba"
+  },
+  "45": {
+    "netto": "55",
+    "name": "Ostatní nákladové úroky a podobné náklady"
+  },
+  "46": {
+    "netto": "56",
+    "name": "Ostatní finanční výnosy"
+  },
+  "47": {
+    "netto": "57",
+    "name": "Ostatní finanční náklady"
+  },
+  "51": {
+    "netto": "61",
+    "name": "Daň z příjmů splatná"
+  },
+  "52": {
+    "netto": "62",
+    "name": "Daň z příjmů odložená (+/-)"
+  },
+  "9995": {
+    "netto": "64",
+    "name": "Mimořádný výsledek hospodaření"
+  },
+  "54": {
+    "netto": "65",
+    "name": "Převod podílu na výsledku hospodaření společníkům (+/-)"
+  }
+}

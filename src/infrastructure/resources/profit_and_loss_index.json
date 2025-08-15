@@ -107,10 +107,26 @@
         "name": "Výnosy z dlouhodobého finančního majetku - podíly",
         "sub_rows": {
             "32": {
-                "name": "Výnosy z podílů - ovládaná nebo ovládající osoba"
+                "name": "Výnosy z podílů - ovládaná nebo ovládající osoba",
+                "sub_rows": {
+                    "9991": {
+                        "name": "Výnosy z podílů - ovládaná nebo ovládající osoba"
+                    },
+                    "9992": {
+                        "name": "Tržby z prodeje cenných papírů a podílů ovládaná nebo ovládající osoba"
+                    }
+                }
             },
             "33": {
-                "name": "Ostatní výnosy z podílů"
+                "name": "Ostatní výnosy z podílů",
+                "sub_rows": {
+                    "9993": {
+                        "name": "Výnosy z ostatních podílů"
+                    },
+                    "9994": {
+                        "name": "Tržby z prodeje cenných papírů a ostatních podílů"
+                    }
+                }
             }
         }
     },
@@ -181,6 +197,9 @@
     },
     "53": {
         "name": "Výsledek hospodaření po zdanění (+/-)"
+    },
+    "9995": {
+        "name": "Mimořádný výsledek hospodaření"
     },
     "54": {
         "name": "Převod podílu na výsledku hospodaření společníkům (+/-)"
