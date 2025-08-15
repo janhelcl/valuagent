@@ -1,0 +1,473 @@
+{
+  "2": {
+    "brutto": "E5",
+    "korekce": "F5",
+    "name": "Pohledávky za upsaný základní kapitál"
+  },
+  "5": {
+    "brutto": "E8",
+    "korekce": "F8",
+    "name": "Nehmotné výsledky výzkumu a vývoje"
+  },
+  "7": {
+    "brutto": "E10",
+    "korekce": "F10",
+    "name": "Software"
+  },
+  "8": {
+    "brutto": "E11",
+    "korekce": "F11",
+    "name": "Ostatní ocenitelná práva"
+  },
+  "9": {
+    "brutto": "E12",
+    "korekce": "F12",
+    "name": "Goodwill"
+  },
+  "10": {
+    "brutto": "E13",
+    "korekce": "F13",
+    "name": "Ostatní dlouhodobý nehmotný majetek"
+  },
+  "12": {
+    "brutto": "E15",
+    "korekce": "F15",
+    "name": "Poskytnuté zálohy na dlouhodobý nehmotný majetek"
+  },
+  "13": {
+    "brutto": "E16",
+    "korekce": "F16",
+    "name": "Nedokončený dlouhodobý nehmotný majetek"
+  },
+  "16": {
+    "brutto": "E19",
+    "korekce": "F19",
+    "name": "Pozemky"
+  },
+  "17": {
+    "brutto": "E20",
+    "korekce": "F20",
+    "name": "Stavby"
+  },
+  "18": {
+    "brutto": "E21",
+    "korekce": "F21",
+    "name": "Hmotné movité věci a jejich soubory"
+  },
+  "19": {
+    "brutto": "E22",
+    "korekce": "F22",
+    "name": "Oceňovací rozdíl k nabytému majetku"
+  },
+  "21": {
+    "brutto": "E24",
+    "korekce": "F24",
+    "name": "Pěstitelské celky trvalých porostů"
+  },
+  "22": {
+    "brutto": "E25",
+    "korekce": "F25",
+    "name": "Dospělá zvířata a jejich skupiny"
+  },
+  "23": {
+    "brutto": "E26",
+    "korekce": "F26",
+    "name": "Jiný dlouhodobý hmotný majetek"
+  },
+  "25": {
+    "brutto": "E28",
+    "korekce": "F28",
+    "name": "Poskytnuté zálohy na dlouhodobý hmotný majetek"
+  },
+  "26": {
+    "brutto": "E29",
+    "korekce": "F29",
+    "name": "Nedokončený dlouhodobý hmotný majetek"
+  },
+  "28": {
+    "brutto": "E31",
+    "korekce": "F31",
+    "name": "Podíly - ovládaná nebo ovládající osoba"
+  },
+  "29": {
+    "brutto": "E32",
+    "korekce": "F32",
+    "name": "Zápůjčky a úvěry - ovládaná nebo ovládající osoba"
+  },
+  "30": {
+    "brutto": "E33",
+    "korekce": "F33",
+    "name": "Podíly - podstatný vliv"
+  },
+  "31": {
+    "brutto": "E34",
+    "korekce": "F34",
+    "name": "Zápůjčky a úvěry - podstatný vliv"
+  },
+  "32": {
+    "brutto": "E35",
+    "korekce": "F35",
+    "name": "Ostatní dlouhodobé cenné papíry a podíly"
+  },
+  "33": {
+    "brutto": "E36",
+    "korekce": "F36",
+    "name": "Zápůjčky a úvěry - ostatní"
+  },
+  "35": {
+    "brutto": "E38",
+    "korekce": "F38",
+    "name": "Jiný dlouhodobý finanční majetek"
+  },
+  "36": {
+    "brutto": "E39",
+    "korekce": "F39",
+    "name": "Poskytnuté zálohy na dlouhodobý finanční majetek"
+  },
+  "39": {
+    "brutto": "E42",
+    "korekce": "F42",
+    "name": "Materiál"
+  },
+  "40": {
+    "brutto": "E43",
+    "korekce": "F43",
+    "name": "Nedokončená výroba a polotovary"
+  },
+  "42": {
+    "brutto": "E45",
+    "korekce": "F45",
+    "name": "Výrobky"
+  },
+  "43": {
+    "brutto": "E46",
+    "korekce": "F46",
+    "name": "Zboží"
+  },
+  "44": {
+    "brutto": "E47",
+    "korekce": "F47",
+    "name": "Mladá a ostatní zvířata a jejich skupiny"
+  },
+  "45": {
+    "brutto": "E48",
+    "korekce": "F48",
+    "name": "Poskytnuté zálohy na zásoby"
+  },
+  "48": {
+    "brutto": "E51",
+    "korekce": "F51",
+    "name": "Pohledávky z obchodních vztahů"
+  },
+  "49": {
+    "brutto": "E52",
+    "korekce": "F52",
+    "name": "Pohledávky - ovládaná nebo ovládající osoba"
+  },
+  "50": {
+    "brutto": "E53",
+    "korekce": "F53",
+    "name": "Pohledávky - podstatný vliv"
+  },
+  "51": {
+    "brutto": "E54",
+    "korekce": "F54",
+    "name": "Odložená daňová pohledávka"
+  },
+  "53": {
+    "brutto": "E56",
+    "korekce": "F56",
+    "name": "Pohledávky za společníky"
+  },
+  "54": {
+    "brutto": "E57",
+    "korekce": "F57",
+    "name": "Dlouhodobé poskytnuté zálohy"
+  },
+  "55": {
+    "brutto": "E58",
+    "korekce": "F58",
+    "name": "Dohadné účty aktivní"
+  },
+  "56": {
+    "brutto": "E59",
+    "korekce": "F59",
+    "name": "Jiné pohledávky"
+  },
+  "58": {
+    "brutto": "E61",
+    "korekce": "F61",
+    "name": "Pohledávky z obchodních vztahů"
+  },
+  "59": {
+    "brutto": "E62",
+    "korekce": "F62",
+    "name": "Pohledávky - ovládaná nebo ovládající osoba"
+  },
+  "60": {
+    "brutto": "E63",
+    "korekce": "F63",
+    "name": "Pohledávky - podstatný vliv"
+  },
+  "62": {
+    "brutto": "E65",
+    "korekce": "F65",
+    "name": "Pohledávky za společníky"
+  },
+  "63": {
+    "brutto": "E66",
+    "korekce": "F66",
+    "name": "Sociální zabezpečení a zdravotní pojištění"
+  },
+  "64": {
+    "brutto": "E67",
+    "korekce": "F67",
+    "name": "Stát - daňové pohledávky"
+  },
+  "65": {
+    "brutto": "E68",
+    "korekce": "F68",
+    "name": "Krátkodobé poskytnuté zálohy"
+  },
+  "66": {
+    "brutto": "E69",
+    "korekce": "F69",
+    "name": "Dohadné účty aktivní"
+  },
+  "67": {
+    "brutto": "E70",
+    "korekce": "F70",
+    "name": "Jiné pohledávky"
+  },
+  "69": {
+    "brutto": "E72",
+    "korekce": "F72",
+    "name": "Podíly - ovládaná nebo ovládající osoba"
+  },
+  "70": {
+    "brutto": "E73",
+    "korekce": "F73",
+    "name": "Ostatní krátkodobý finanční majetek"
+  },
+  "72": {
+    "brutto": "E75",
+    "korekce": "F75",
+    "name": "Peněžní prostředky v pokladně"
+  },
+  "73": {
+    "brutto": "E76",
+    "korekce": "F76",
+    "name": "Peněžní prostředky na účtech"
+  },
+  "75": {
+    "brutto": "E78",
+    "korekce": "F78",
+    "name": "Náklady příštích období"
+  },
+  "76": {
+    "brutto": "E79",
+    "korekce": "F79",
+    "name": "Komplexní náklady příštích období"
+  },
+  "77": {
+    "brutto": "E80",
+    "korekce": "F80",
+    "name": "Příjmy příštích období"
+  },
+  "81": {
+    "netto": "E92",
+    "name": "Základní kapitál"
+  },
+  "82": {
+    "netto": "E93",
+    "name": "Vlastní podíly (-)"
+  },
+  "83": {
+    "netto": "E94",
+    "name": "Změny základního kapitálu"
+  },
+  "85": {
+    "netto": "E96",
+    "name": "Ážio"
+  },
+  "87": {
+    "netto": "E98",
+    "name": "Ostatní kapitálové fondy"
+  },
+  "88": {
+    "netto": "E99",
+    "name": "Oceňovací rozdíly z přecenění majetku a závazků (+/-)"
+  },
+  "89": {
+    "netto": "E100",
+    "name": "Oceňovací rozdíly z přecenění při přeměnách obchodních korporací (+/-)"
+  },
+  "90": {
+    "netto": "E101",
+    "name": "Rozdíly z přeměn obchodních korporací (+/-)"
+  },
+  "91": {
+    "netto": "E102",
+    "name": "Rozdíly z ocenění při přeměnách obchodních korporací (+/-)"
+  },
+  "93": {
+    "netto": "E104",
+    "name": "Ostatní rezervní fondy"
+  },
+  "94": {
+    "netto": "E105",
+    "name": "Statutární a ostatní fondy"
+  },
+  "96": {
+    "netto": "E107",
+    "name": "Nerozdělený zisk minulých let"
+  },
+  "97": {
+    "netto": "E108",
+    "name": "Neuhrazená ztráta minulých let (-)"
+  },
+  "98": {
+    "netto": "E109",
+    "name": "Jiný výsledek hospodaření minulých let (+/-)"
+  },
+  "99": {
+    "netto": "E110",
+    "name": "Výsledek hospodaření běžného účetního období (+/-)"
+  },
+  "100": {
+    "netto": "E111",
+    "name": "Rozhodnuto o zálohové výplatě podílu na zisku (-)"
+  },
+  "103": {
+    "netto": "E114",
+    "name": "Rezerva na důchody a podobné závazky"
+  },
+  "104": {
+    "netto": "E115",
+    "name": "Rezerva na daň z příjmů"
+  },
+  "105": {
+    "netto": "E116",
+    "name": "Rezervy podle zvláštních právních předpisů"
+  },
+  "106": {
+    "netto": "E117",
+    "name": "Ostatní rezervy"
+  },
+  "110": {
+    "netto": "E121",
+    "name": "Vyměnitelné dluhopisy"
+  },
+  "111": {
+    "netto": "E122",
+    "name": "Ostatní dluhopisy"
+  },
+  "112": {
+    "netto": "E123",
+    "name": "Závazky k úvěrovým institucím"
+  },
+  "113": {
+    "netto": "E124",
+    "name": "Dlouhodobé přijaté zálohy"
+  },
+  "114": {
+    "netto": "E125",
+    "name": "Závazky z obchodních vztahů"
+  },
+  "115": {
+    "netto": "E126",
+    "name": "Dlouhodobé směnky k úhradě"
+  },
+  "116": {
+    "netto": "E127",
+    "name": "Závazky - ovládaná nebo ovládající osoba"
+  },
+  "117": {
+    "netto": "E128",
+    "name": "Závazky - podstatný vliv"
+  },
+  "118": {
+    "netto": "E129",
+    "name": "Odložený daňový závazek"
+  },
+  "120": {
+    "netto": "E131",
+    "name": "Závazky ke společníkům"
+  },
+  "121": {
+    "netto": "E132",
+    "name": "Dohadné účty pasivní"
+  },
+  "122": {
+    "netto": "E133",
+    "name": "Jiné závazky"
+  },
+  "125": {
+    "netto": "E136",
+    "name": "Vyměnitelné dluhopisy"
+  },
+  "126": {
+    "netto": "E137",
+    "name": "Ostatní dluhopisy"
+  },
+  "127": {
+    "netto": "E138",
+    "name": "Závazky k úvěrovým institucím"
+  },
+  "128": {
+    "netto": "E139",
+    "name": "Krátkodobé přijaté zálohy"
+  },
+  "129": {
+    "netto": "E140",
+    "name": "Závazky z obchodních vztahů"
+  },
+  "130": {
+    "netto": "E141",
+    "name": "Krátkodobé směnky k úhradě"
+  },
+  "131": {
+    "netto": "E142",
+    "name": "Závazky - ovládaná nebo ovládající osoba"
+  },
+  "132": {
+    "netto": "E143",
+    "name": "Závazky - podstatný vliv"
+  },
+  "134": {
+    "netto": "E145",
+    "name": "Závazky ke společníkům"
+  },
+  "135": {
+    "netto": "E146",
+    "name": "Krátkodobé finanční výpomoci"
+  },
+  "136": {
+    "netto": "E147",
+    "name": "Závazky k zaměstnancům"
+  },
+  "137": {
+    "netto": "E148",
+    "name": "Závazky ze soc. zabezp. a zdravotního p."
+  },
+  "138": {
+    "netto": "E149",
+    "name": "Stát - daňové závazky a dotace"
+  },
+  "139": {
+    "netto": "E150",
+    "name": "Dohadné účty pasivní"
+  },
+  "140": {
+    "netto": "E151",
+    "name": "Jiné závazky"
+  },
+  "142": {
+    "netto": "E153",
+    "name": "Výdaje příštích období"
+  },
+  "143": {
+    "netto": "E154",
+    "name": "Výnosy příštích období"
+  }
+}

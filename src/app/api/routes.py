@@ -9,6 +9,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 logger = logging.getLogger(__name__)
 
 from src.infrastructure.exporters.excel import export_excel
+from src.infrastructure.exporters.dcf import export_dcf_template
 from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async
 
 
@@ -396,42 +397,68 @@ async def process_pdf(
         ]
         return JSONResponse(payload)
 
-    # If only one Excel, return it directly for convenience
-    if len(results) == 1:
-        logger.info("Returning single Excel file")
-        r0 = results[0]
-        st_type = r0["statement_type"]
-        model_obj = r0["model"]
-        excel_buffer = export_excel(st_type, model_obj)
-        safe_name = (r0["original"] or "valuagent").rsplit(".", 1)[0]
-        filename = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
-        logger.info(f"Generated Excel file: {filename}")
+    # Export using DCF template with Předmět ocenění sheet filled
+    try:
+        logger.info("Creating DCF template export")
+        dcf_buffer = export_dcf_template(results)
+        
+        # Generate filename based on latest balance sheet year
+        balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
+        if balance_sheets:
+            latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+            year = getattr(latest_bs["model"], "rok", "")
+            filename = f"DCF_valuagent_{year}.xlsx"
+        else:
+            filename = "DCF_valuagent.xlsx"
+        
+        logger.info(f"Generated DCF template: {filename}")
         return StreamingResponse(
-            excel_buffer,
+            dcf_buffer,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
-
-    # Otherwise bundle into a ZIP
-    logger.info(f"Creating ZIP file with {len(results)} Excel files")
-    zip_buf = io.BytesIO()
-    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for i, r in enumerate(results):
-            st_type = r["statement_type"]
-            model_obj = r["model"]
-            logger.debug(f"Generating Excel {i+1}/{len(results)}: {r['original']} - {st_type}")
+        
+    except Exception as e:
+        logger.error(f"Failed to create DCF template: {e}", exc_info=True)
+        # Fallback to old behavior if DCF template fails
+        logger.info("Falling back to ZIP export due to DCF template error")
+        
+        # If only one Excel, return it directly for convenience
+        if len(results) == 1:
+            logger.info("Returning single Excel file (fallback)")
+            r0 = results[0]
+            st_type = r0["statement_type"]
+            model_obj = r0["model"]
             excel_buffer = export_excel(st_type, model_obj)
-            safe_name = (r["original"] or "valuagent").rsplit(".", 1)[0]
-            arcname = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
-            zf.writestr(arcname, excel_buffer.getvalue())
-    zip_buf.seek(0)
+            safe_name = (r0["original"] or "valuagent").rsplit(".", 1)[0]
+            filename = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
+            logger.info(f"Generated Excel file: {filename}")
+            return StreamingResponse(
+                excel_buffer,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
 
-    logger.info(f"ZIP file created with {len(results)} files, size: {zip_buf.getbuffer().nbytes/1024:.1f}KB")
-    return StreamingResponse(
-        zip_buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
-    )
+        # Otherwise bundle into a ZIP
+        logger.info(f"Creating ZIP file with {len(results)} Excel files (fallback)")
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for i, r in enumerate(results):
+                st_type = r["statement_type"]
+                model_obj = r["model"]
+                logger.debug(f"Generating Excel {i+1}/{len(results)}: {r['original']} - {st_type}")
+                excel_buffer = export_excel(st_type, model_obj)
+                safe_name = (r["original"] or "valuagent").rsplit(".", 1)[0]
+                arcname = f"{safe_name}_{st_type}_{model_obj.rok}.xlsx"
+                zf.writestr(arcname, excel_buffer.getvalue())
+        zip_buf.seek(0)
+
+        logger.info(f"ZIP file created with {len(results)} files, size: {zip_buf.getbuffer().nbytes/1024:.1f}KB")
+        return StreamingResponse(
+            zip_buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
+        )
 
 
 
