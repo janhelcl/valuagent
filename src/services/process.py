@@ -154,6 +154,65 @@ async def disambiguate_pdf_bytes_async(pdf_bytes: bytes) -> dict:
     return result
 
 
+def _format_validation_error(error_msg: str, statement_type: str) -> str:
+    """Format validation error messages to be human-readable with row names."""
+    from src.shared import utils
+    
+    # Load row names
+    if statement_type == "rozvaha":
+        row_names = utils.load_balance_sheet_row_names()
+    else:
+        row_names = utils.load_profit_and_loss_row_names()
+    
+    # Try to extract row numbers and replace with names
+    import re
+    
+    # Pattern for "Row X" or "row X" or "ř. X"
+    def replace_row_ref(match):
+        row_num_str = match.group(1)
+        try:
+            row_num = int(row_num_str)
+            row_name = row_names.get(row_num, f"ř. {row_num}")
+            return f"ř. {row_num} ({row_name})"
+        except ValueError:
+            return match.group(0)
+    
+    # Replace various row reference patterns
+    formatted = re.sub(r'[Rr]ow (\d+)', replace_row_ref, error_msg)
+    formatted = re.sub(r'ř\. (\d+)', replace_row_ref, formatted)
+    
+    # Handle validation rule failures with sums
+    if "Rule validation failed" in formatted:
+        # Pattern: "Row X (value) != Sum of rows Y+Z+... (sum_value)"
+        pattern = r'Row (\d+) \(([^)]+)\) != Sum of rows ([^(]+) \(([^)]+)\)'
+        match = re.search(pattern, formatted)
+        if match:
+            target_row = int(match.group(1))
+            target_value = match.group(2)
+            source_rows_str = match.group(3)
+            sum_value = match.group(4)
+            
+            target_name = row_names.get(target_row, f"ř. {target_row}")
+            
+            # Parse source rows
+            source_parts = []
+            for part in source_rows_str.split('+'):
+                try:
+                    src_row = int(part.strip())
+                    src_name = row_names.get(src_row, f"ř. {src_row}")
+                    source_parts.append(f"ř. {src_row} ({src_name})")
+                except ValueError:
+                    source_parts.append(part.strip())
+            
+            formatted = f"Pravidlo selhalo: ř. {target_row} ({target_name}) = {target_value}, ale součet řádků {' + '.join(source_parts)} = {sum_value}"
+    
+    # Handle brutto-korekce validation
+    if "Brutto - Korekce validation failed" in formatted:
+        formatted = re.sub(r'Brutto - Korekce validation failed:', 'Chyba Brutto - Korekce:', formatted)
+    
+    return formatted
+
+
 async def ocr_and_validate_with_retries(
     pdf_bytes: bytes,
     statement_type: str,
@@ -166,13 +225,13 @@ async def ocr_and_validate_with_retries(
       - statement_type: str
       - model: validated Pydantic model or None
       - raw: last parsed dict or None
-      - validation_errors: list[str]
+      - validation_errors: list[str] (only from final attempt)
       - ocr_attempts: int
       - status: "ok" | "errors"
     """
     attempts = 0
     last_raw = None
-    last_errors: list[str] = []
+    final_validation_error = None
 
     for attempt in range(1, max_retries + 1):
         attempts = attempt
@@ -180,7 +239,7 @@ async def ocr_and_validate_with_retries(
         text_response = await generate_json_from_pdf_async(pdf_bytes, pick_prompt(statement_type))
         if not text_response:
             logger.error("Empty response from model during OCR attempt")
-            last_errors.append("Empty response from OCR model")
+            final_validation_error = "Prázdná odpověď z OCR modelu"
             continue
 
         try:
@@ -191,7 +250,7 @@ async def ocr_and_validate_with_retries(
                 data_dict = utils.load_json_from_text(text_response)
             except Exception as e2:
                 logger.error(f"Fallback JSON extraction failed: {e2}")
-                last_errors.append("Invalid JSON from OCR model")
+                final_validation_error = "Neplatný JSON z OCR modelu"
                 continue
 
         last_raw = data_dict
@@ -209,12 +268,13 @@ async def ocr_and_validate_with_retries(
             }
         except Exception as e:
             # Pydantic validation error or business rule error
-            msg = str(e)
-            logger.info(f"Validation failed on attempt {attempt}: {msg}")
-            last_errors.append(msg)
+            raw_msg = str(e)
+            formatted_msg = _format_validation_error(raw_msg, statement_type)
+            logger.info(f"Validation failed on attempt {attempt}: {raw_msg}")
+            final_validation_error = formatted_msg
             # continue to retry
 
-    # All attempts failed; return best-effort raw with errors
+    # All attempts failed; return best-effort model with final error
     best_effort_model = None
     if isinstance(last_raw, dict):
         try:
@@ -244,11 +304,14 @@ async def ocr_and_validate_with_retries(
         except Exception as e:
             logger.error(f"Failed to construct best-effort model: {e}")
 
+    # Return only the final validation error (the one from the data we're actually using)
+    validation_errors = [final_validation_error] if final_validation_error else []
+    
     return {
         "statement_type": statement_type,
         "model": best_effort_model,
         "raw": last_raw,
-        "validation_errors": last_errors,
+        "validation_errors": validation_errors,
         "ocr_attempts": attempts,
         "status": "errors",
     }
