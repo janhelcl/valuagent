@@ -11,8 +11,8 @@ from src.domain.prompts.profit_and_loss import profit_and_loss_ocr_instructions
 from src.domain.prompts.statement_disambiguation import (
     statement_disambiguation_instructions,
 )
-from src.domain.models.balance_sheet import BalanceSheet
-from src.domain.models.profit_and_loss import ProfitAndLoss
+from src.domain.models.balance_sheet import BalanceSheet, BalanceSheetRow
+from src.domain.models.profit_and_loss import ProfitAndLoss, ProfitAndLossRow
 from src.infrastructure.clients.genai_client import generate_json_from_pdf, generate_json_from_pdf_async
 from src.shared import utils
 
@@ -215,9 +215,38 @@ async def ocr_and_validate_with_retries(
             # continue to retry
 
     # All attempts failed; return best-effort raw with errors
+    best_effort_model = None
+    if isinstance(last_raw, dict):
+        try:
+            # Build a model instance without triggering validators
+            def construct_bs(data_dict: dict) -> BalanceSheet:
+                data_int = utils.convert_string_keys_to_int(data_dict)
+                rows = {}
+                for k, v in (data_int.get("data") or {}).items():
+                    if isinstance(v, dict):
+                        rows[int(k)] = BalanceSheetRow.model_construct(**v)
+                rok = data_int.get("rok")
+                return BalanceSheet.model_construct(rok=rok, data=rows, tolerance=tolerance)
+
+            def construct_pl(data_dict: dict) -> ProfitAndLoss:
+                data_int = utils.convert_string_keys_to_int(data_dict)
+                rows = {}
+                for k, v in (data_int.get("data") or {}).items():
+                    if isinstance(v, dict):
+                        rows[int(k)] = ProfitAndLossRow.model_construct(**v)
+                rok = data_int.get("rok")
+                return ProfitAndLoss.model_construct(rok=rok, data=rows, tolerance=tolerance)
+
+            if statement_type == "rozvaha":
+                best_effort_model = construct_bs(last_raw)
+            else:
+                best_effort_model = construct_pl(last_raw)
+        except Exception as e:
+            logger.error(f"Failed to construct best-effort model: {e}")
+
     return {
         "statement_type": statement_type,
-        "model": None,
+        "model": best_effort_model,
         "raw": last_raw,
         "validation_errors": last_errors,
         "ocr_attempts": attempts,

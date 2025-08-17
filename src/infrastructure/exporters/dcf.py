@@ -246,37 +246,37 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     year_columns = ['I', 'H', 'G', 'F']
     max_years = len(year_columns)
     
-    # Skip the latest year (already in Předmět ocenění), take up to 4 historical years
-    historical_balance_sheets = balance_sheet_results[1:max_years+1]
+    # Collect all possible years with their data sources
+    all_years = set()
+    year_to_source = {}
     
-    # Prepare data sources: each entry is (balance_sheet_result, year, data_source)
-    # data_source can be 'netto' or 'netto_minule'
+    # First pass: collect all netto years (skip latest as it's in Předmět ocenění)
+    for bs in balance_sheet_results[1:]:  # Skip latest year
+        model = bs.get("model")
+        if model is not None:
+            year = getattr(model, "rok", 0)
+            if year > 0:
+                all_years.add(year)
+                year_to_source[year] = (bs, 'netto')
+    
+    # Second pass: add netto_minule years if we have space
+    for bs in balance_sheet_results:
+        model = bs.get("model")
+        if model is not None:
+            year = getattr(model, "rok", 0) - 1  # netto_minule represents previous year
+            if year > 0 and year not in all_years:
+                all_years.add(year)
+                year_to_source[year] = (bs, 'netto_minule')
+    
+    # Sort years descending and take only what fits in columns
+    sorted_years = sorted(all_years, reverse=True)[:max_years]
+    
+    # Build data sources list: (balance_sheet_result, year, data_source)
     data_sources = []
-    
-    # Add historical balance sheets with their netto values
-    for bs in historical_balance_sheets:
-        year = getattr(bs["model"], "rok", 0)
-        data_sources.append((bs, year, 'netto'))
-    
-    # If we have room left, add netto_minule values from available balance sheets
-    remaining_columns = max_years - len(data_sources)
-    if remaining_columns > 0:
-        # Use netto_minule from balance sheets to fill additional years
-        # Start from the beginning but avoid duplicating years we already have
-        existing_years = {year for _, year, _ in data_sources}
-        
-        for bs in balance_sheet_results:
-            if remaining_columns <= 0:
-                break
-            year = getattr(bs["model"], "rok", 0) - 1  # netto_minule is previous year
-            if year > 0 and year not in existing_years:  # Only if valid and not duplicate
-                data_sources.append((bs, year, 'netto_minule'))
-                existing_years.add(year)
-                remaining_columns -= 1
-    
-    # Sort by year descending (newest first) and take only what fits
-    data_sources.sort(key=lambda x: x[1], reverse=True)
-    data_sources = data_sources[:max_years]
+    for year in sorted_years:
+        if year in year_to_source:
+            bs, source = year_to_source[year]
+            data_sources.append((bs, year, source))
     
     if not data_sources:
         logger.info("No historical balance sheet data available for Rozvaha sheet")
@@ -399,34 +399,37 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     year_columns = ['J', 'I', 'H', 'G', 'F']
     max_years = len(year_columns)
     
-    # Prepare data sources: each entry is (profit_loss_result, year, data_source)
-    # data_source can be 'současné' or 'minulé'
+    # Collect all possible years with their data sources
+    all_years = set()
+    year_to_source = {}
+    
+    # First pass: collect all současné years
+    for pl in profit_loss_results:
+        model = pl.get("model")
+        if model is not None:
+            year = getattr(model, "rok", 0)
+            if year > 0:
+                all_years.add(year)
+                year_to_source[year] = (pl, 'současné')
+    
+    # Second pass: add minulé years if not already present
+    for pl in profit_loss_results:
+        model = pl.get("model")
+        if model is not None:
+            year = getattr(model, "rok", 0) - 1  # minulé represents previous year
+            if year > 0 and year not in all_years:
+                all_years.add(year)
+                year_to_source[year] = (pl, 'minulé')
+    
+    # Sort years descending and take only what fits in columns
+    sorted_years = sorted(all_years, reverse=True)[:max_years]
+    
+    # Build data sources list: (profit_loss_result, year, data_source)
     data_sources = []
-    
-    # Add all profit and loss statements with their současné values
-    for pl in profit_loss_results[:max_years]:
-        year = getattr(pl["model"], "rok", 0)
-        data_sources.append((pl, year, 'současné'))
-    
-    # If we have room left, add minulé values from available profit and loss statements
-    remaining_columns = max_years - len(data_sources)
-    if remaining_columns > 0:
-        # Use minulé from profit and loss statements to fill additional years
-        # Start from the beginning but avoid duplicating years we already have
-        existing_years = {year for _, year, _ in data_sources}
-        
-        for pl in profit_loss_results:
-            if remaining_columns <= 0:
-                break
-            year = getattr(pl["model"], "rok", 0) - 1  # minulé is previous year
-            if year > 0 and year not in existing_years:  # Only if valid and not duplicate
-                data_sources.append((pl, year, 'minulé'))
-                existing_years.add(year)
-                remaining_columns -= 1
-    
-    # Sort by year descending (newest first) and take only what fits
-    data_sources.sort(key=lambda x: x[1], reverse=True)
-    data_sources = data_sources[:max_years]
+    for year in sorted_years:
+        if year in year_to_source:
+            pl, source = year_to_source[year]
+            data_sources.append((pl, year, source))
     
     if not data_sources:
         logger.info("No profit and loss data available for Výsledovka sheet")
