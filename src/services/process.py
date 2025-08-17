@@ -152,3 +152,74 @@ async def disambiguate_pdf_bytes_async(pdf_bytes: bytes) -> dict:
     result = {"rozvaha": rozvaha, "vzz": vzz, "datum": datum}
     logger.info(f"Disambiguation completed: {result}")
     return result
+
+
+async def ocr_and_validate_with_retries(
+    pdf_bytes: bytes,
+    statement_type: str,
+    tolerance: int,
+    max_retries: int,
+) -> dict:
+    """Run OCR and statement-level validation with up to max_retries attempts.
+
+    Returns a result dict containing:
+      - statement_type: str
+      - model: validated Pydantic model or None
+      - raw: last parsed dict or None
+      - validation_errors: list[str]
+      - ocr_attempts: int
+      - status: "ok" | "errors"
+    """
+    attempts = 0
+    last_raw = None
+    last_errors: list[str] = []
+
+    for attempt in range(1, max_retries + 1):
+        attempts = attempt
+        logger.info(f"OCR attempt {attempt}/{max_retries} for {statement_type}")
+        text_response = await generate_json_from_pdf_async(pdf_bytes, pick_prompt(statement_type))
+        if not text_response:
+            logger.error("Empty response from model during OCR attempt")
+            last_errors.append("Empty response from OCR model")
+            continue
+
+        try:
+            data_dict = json.loads(text_response)
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode failed on attempt {attempt}: {e}")
+            try:
+                data_dict = utils.load_json_from_text(text_response)
+            except Exception as e2:
+                logger.error(f"Fallback JSON extraction failed: {e2}")
+                last_errors.append("Invalid JSON from OCR model")
+                continue
+
+        last_raw = data_dict
+
+        try:
+            model_obj = validate_payload(statement_type, data_dict, tolerance)
+            logger.info(f"Validation succeeded on attempt {attempt} for {statement_type}")
+            return {
+                "statement_type": statement_type,
+                "model": model_obj,
+                "raw": last_raw,
+                "validation_errors": [],
+                "ocr_attempts": attempts,
+                "status": "ok",
+            }
+        except Exception as e:
+            # Pydantic validation error or business rule error
+            msg = str(e)
+            logger.info(f"Validation failed on attempt {attempt}: {msg}")
+            last_errors.append(msg)
+            # continue to retry
+
+    # All attempts failed; return best-effort raw with errors
+    return {
+        "statement_type": statement_type,
+        "model": None,
+        "raw": last_raw,
+        "validation_errors": last_errors,
+        "ocr_attempts": attempts,
+        "status": "errors",
+    }

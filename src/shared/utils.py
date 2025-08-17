@@ -57,3 +57,31 @@ def load_json_from_text(response: str) -> Dict[str, Any]:
     return json.loads(response.removeprefix("```json\n").removesuffix("\n```"))
 
 
+
+def _flatten_index_to_row_names(index: Dict[int, Any]) -> Dict[int, str]:
+    """Flatten hierarchical index structure to a map of row_id -> long name."""
+    flat: Dict[int, str] = {}
+    def walk(node: Dict[int, Any]):
+        for key, value in node.items():
+            try:
+                row_id = int(key)
+            except (ValueError, TypeError):
+                continue
+            name = value.get("name") if isinstance(value, dict) else None
+            if isinstance(name, str):
+                flat[row_id] = name
+            sub = value.get("sub_rows") if isinstance(value, dict) else None
+            if isinstance(sub, dict):
+                walk(sub)
+    walk({int(k): v for k, v in index.items()})
+    return flat
+
+
+def load_balance_sheet_row_names() -> Dict[int, str]:
+    """Return a flat map of Rozvaha row_id -> Czech long names from resources."""
+    return _flatten_index_to_row_names(read_balance_sheet_index())
+
+
+def load_profit_and_loss_row_names() -> Dict[int, str]:
+    """Return a flat map of Výsledovka row_id -> Czech long names from resources."""
+    return _flatten_index_to_row_names(read_profit_and_loss_index())

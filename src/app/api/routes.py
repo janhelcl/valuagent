@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 from src.infrastructure.exporters.excel import export_excel
 from src.infrastructure.exporters.dcf import export_dcf_template
-from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async
+from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async, ocr_and_validate_with_retries
+from src.infrastructure import config
 
 
 router = APIRouter()
@@ -316,6 +317,7 @@ async def process_pdf(
     pdfs: list[UploadFile] = File(...),
     tolerance: int = Form(1),
     return_json: bool = Form(False),
+    ocr_retries: int = Form(None),
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
@@ -351,24 +353,33 @@ async def process_pdf(
 
         logger.info(f"File {original_name} contains: {present_types}")
 
-        # Process each statement type concurrently
+        # Determine max retries
+        max_retries = ocr_retries if ocr_retries is not None else config.get_ocr_max_retries()
+        if not isinstance(max_retries, int):
+            max_retries = config.get_ocr_max_retries()
+        if max_retries < 1:
+            max_retries = 1
+        if max_retries > 5:
+            max_retries = 5
+
+        # Process each statement type concurrently with retries
         tasks = []
         for st_type in present_types:
-            logger.debug(f"Creating task for {original_name} - {st_type}")
-            tasks.append(process_pdf_bytes_async(pdf_bytes, st_type, tolerance))
+            logger.debug(f"Creating task for {original_name} - {st_type} with up to {max_retries} OCR attempts")
+            tasks.append(ocr_and_validate_with_retries(pdf_bytes, st_type, tolerance, max_retries))
         
         logger.info(f"Processing {len(tasks)} statement types for {original_name}")
         models = await asyncio.gather(*tasks)
         
         file_results = []
-        for st_type, model_obj in zip(present_types, models):
-            file_results.append({
-                "original": original_name,
-                "statement_type": st_type,
-                "model": model_obj,
-                "disambiguation_info": info,  # Add disambiguation info to results
-            })
-            logger.debug(f"Completed {st_type} for {original_name}")
+        for st_type, result_obj in zip(present_types, models):
+            # result_obj is the dict from ocr_and_validate_with_retries
+            result_obj = dict(result_obj)
+            result_obj["original"] = original_name
+            result_obj["statement_type"] = st_type
+            result_obj["disambiguation_info"] = info
+            file_results.append(result_obj)
+            logger.debug(f"Completed {st_type} for {original_name} with status {result_obj.get('status')}")
         
         logger.info(f"Finished processing file: {original_name} ({len(file_results)} results)")
         return file_results
@@ -389,10 +400,13 @@ async def process_pdf(
         # Return compact JSON summary
         payload = [
             {
-                "file": r["original"],
-                "statement_type": r["statement_type"],
-                "rok": getattr(r["model"], "rok", None),
-                "rows": len(getattr(r["model"], "data", {})),
+                "file": r.get("original"),
+                "statement_type": r.get("statement_type"),
+                "rok": getattr(r.get("model"), "rok", None) if r.get("model") is not None else (r.get("raw") or {}).get("rok"),
+                "rows": len(getattr(r.get("model"), "data", {})) if r.get("model") is not None else len((r.get("raw") or {}).get("data", {})),
+                "ocr_attempts": r.get("ocr_attempts", 1),
+                "status": r.get("status", "ok"),
+                "validation_errors_count": len(r.get("validation_errors") or []),
             }
             for r in results
         ]
@@ -413,7 +427,7 @@ async def process_pdf(
         else:
             filename = "DCF_valuagent.xlsx"
         
-        dcf_buffer = export_dcf_template(results, disambiguation_info)
+        dcf_buffer = export_dcf_template(results, disambiguation_info, tolerance=tolerance)
         
         logger.info(f"Generated DCF template: {filename}")
         return StreamingResponse(

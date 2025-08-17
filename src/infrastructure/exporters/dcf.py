@@ -2,7 +2,7 @@ import io
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import openpyxl
 
@@ -148,8 +148,21 @@ def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result
     else:
         logger.debug("No disambiguation date available for Předmět ocenění sheet")
     
-    balance_sheet = balance_sheet_result["model"]
-    balance_data = getattr(balance_sheet, "data", {})
+    balance_sheet = balance_sheet_result.get("model")
+    # Support fallback to raw dict if model is not present
+    if balance_sheet is not None:
+        balance_data = getattr(balance_sheet, "data", {})
+    else:
+        raw = balance_sheet_result.get("raw") or {}
+        balance_data = {}
+        raw_data = raw.get("data") or {}
+        # Normalize string keys to int where possible
+        for k, v in raw_data.items():
+            try:
+                rid = int(k)
+                balance_data[rid] = v
+            except Exception:
+                continue
     
     filled_count = 0
     missing_count = 0
@@ -168,26 +181,35 @@ def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result
         row_name = cell_mapping.get("name", f"Row {row_id}")
         
         try:
-            # Fill brutto value if mapping and data exist
-            if "brutto" in cell_mapping and hasattr(row_data, "brutto") and row_data.brutto is not None:
-                brutto_cell = cell_mapping["brutto"]
-                sheet[brutto_cell] = row_data.brutto
-                logger.debug(f"Set {brutto_cell} = {row_data.brutto} (brutto for {row_name})")
-            
-            # Fill korekce value if mapping and data exist
-            if "korekce" in cell_mapping and hasattr(row_data, "korekce") and row_data.korekce is not None:
-                korekce_cell = cell_mapping["korekce"]
-                sheet[korekce_cell] = row_data.korekce
-                logger.debug(f"Set {korekce_cell} = {row_data.korekce} (korekce for {row_name})")
-            
-            # Fill netto value if mapping and data exist (for equity/liability rows)
-            if "netto" in cell_mapping and hasattr(row_data, "netto"):
-                netto_cell = cell_mapping["netto"]
-                sheet[netto_cell] = row_data.netto
-                logger.debug(f"Set {netto_cell} = {row_data.netto} (netto for {row_name})")
-            
+            # Access via model attributes or raw dict
+            def get_attr(obj, name: str) -> Optional[int]:
+                if hasattr(obj, name):
+                    return getattr(obj, name)
+                if isinstance(obj, dict):
+                    return obj.get(name)
+                return None
+
+            # Fill brutto
+            if "brutto" in cell_mapping:
+                val = get_attr(row_data, "brutto")
+                if val is not None:
+                    sheet[cell_mapping["brutto"]] = val
+                    logger.debug(f"Set {cell_mapping['brutto']} = {val} (brutto for {row_name})")
+            # Fill korekce
+            if "korekce" in cell_mapping:
+                val = get_attr(row_data, "korekce")
+                if val is not None:
+                    sheet[cell_mapping["korekce"]] = val
+                    logger.debug(f"Set {cell_mapping['korekce']} = {val} (korekce for {row_name})")
+            # Fill netto
+            if "netto" in cell_mapping:
+                val = get_attr(row_data, "netto")
+                if val is not None:
+                    sheet[cell_mapping["netto"]] = val
+                    logger.debug(f"Set {cell_mapping['netto']} = {val} (netto for {row_name})")
+
             filled_count += 1
-            
+
         except Exception as e:
             logger.error(f"Error filling row {row_id} ({row_name}): {e}")
             continue
@@ -275,8 +297,19 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     
     for year_idx, (balance_sheet_result, year, data_source) in enumerate(data_sources):
         column = year_columns[year_idx]
-        balance_sheet = balance_sheet_result["model"]
-        balance_data = getattr(balance_sheet, "data", {})
+        balance_sheet = balance_sheet_result.get("model")
+        if balance_sheet is not None:
+            balance_data = getattr(balance_sheet, "data", {})
+        else:
+            raw = balance_sheet_result.get("raw") or {}
+            raw_data = raw.get("data") or {}
+            balance_data = {}
+            for k, v in raw_data.items():
+                try:
+                    rid = int(k)
+                    balance_data[rid] = v
+                except Exception:
+                    continue
         
         filled_count = 0
         missing_count = 0
@@ -302,15 +335,22 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
             
             try:
                 # Get the value based on data source
+                def get_val(obj, name: str) -> Optional[int]:
+                    if hasattr(obj, name):
+                        return getattr(obj, name)
+                    if isinstance(obj, dict):
+                        return obj.get(name)
+                    return None
+
                 value = None
-                if data_source == 'netto' and hasattr(row_data, "netto"):
-                    value = row_data.netto
-                elif data_source == 'netto_minule' and hasattr(row_data, "netto_minule"):
-                    value = row_data.netto_minule
-                
+                if data_source == 'netto':
+                    value = get_val(row_data, 'netto')
+                elif data_source == 'netto_minule':
+                    value = get_val(row_data, 'netto_minule')
+
                 if value is not None:
                     cell_address = f"{column}{excel_row}"
-                    
+
                     # Check if cell contains a formula - if so, skip it to preserve template logic
                     existing_cell = sheet[cell_address]
                     if existing_cell.data_type == 'f':  # 'f' means formula
@@ -323,7 +363,7 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                 else:
                     logger.debug(f"No {data_source} value for row {row_id} ({row_name})")
                     missing_count += 1
-                    
+
             except Exception as e:
                 logger.error(f"Error filling row {row_id} ({row_name}) in column {column}: {e}")
                 missing_count += 1
@@ -400,8 +440,19 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     
     for year_idx, (profit_loss_result, year, data_source) in enumerate(data_sources):
         column = year_columns[year_idx]
-        profit_loss = profit_loss_result["model"]
-        profit_loss_data = getattr(profit_loss, "data", {})
+        profit_loss = profit_loss_result.get("model")
+        if profit_loss is not None:
+            profit_loss_data = getattr(profit_loss, "data", {})
+        else:
+            raw = profit_loss_result.get("raw") or {}
+            raw_data = raw.get("data") or {}
+            profit_loss_data = {}
+            for k, v in raw_data.items():
+                try:
+                    rid = int(k)
+                    profit_loss_data[rid] = v
+                except Exception:
+                    continue
         
         filled_count = 0
         missing_count = 0
@@ -427,15 +478,22 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
             
             try:
                 # Get the value based on data source
+                def get_val(obj, name: str) -> Optional[int]:
+                    if hasattr(obj, name):
+                        return getattr(obj, name)
+                    if isinstance(obj, dict):
+                        return obj.get(name)
+                    return None
+
                 value = None
-                if data_source == 'současné' and hasattr(row_data, "současné"):
-                    value = row_data.současné
-                elif data_source == 'minulé' and hasattr(row_data, "minulé"):
-                    value = row_data.minulé
-                
+                if data_source == 'současné':
+                    value = get_val(row_data, 'současné')
+                elif data_source == 'minulé':
+                    value = get_val(row_data, 'minulé')
+
                 if value is not None:
                     cell_address = f"{column}{excel_row}"
-                    
+
                     # Check if cell contains a formula - if so, skip it to preserve template logic
                     existing_cell = sheet[cell_address]
                     if existing_cell.data_type == 'f':  # 'f' means formula
@@ -448,7 +506,7 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
                 else:
                     logger.debug(f"No {data_source} value for row {row_id} ({row_name})")
                     missing_count += 1
-                    
+
             except Exception as e:
                 logger.error(f"Error filling row {row_id} ({row_name}) in column {column}: {e}")
                 missing_count += 1
@@ -461,8 +519,72 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     logger.info(f"Successfully filled Výsledovka sheet: {total_filled} total values, {total_missing} total missing")
 
 
-def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict[str, Any] = None) -> io.BytesIO:
-    """Export results to DCF template, filling Předmět ocenění, Rozvaha, and Výsledovka sheets."""
+def add_data_quality_report(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
+    """Create a clear, Czech data quality report sheet summarizing retries, status, and issues."""
+    sheet_name = "Kvalita dat"
+    if sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+        # Clear existing content (optional)
+        for row in sheet[1:sheet.max_row]:
+            for cell in row:
+                cell.value = None
+    else:
+        sheet = workbook.create_sheet(sheet_name)
+
+    # Header
+    sheet["A1"] = "Kvalita dat"
+    sheet["A2"] = f"Tolerance: {tolerance}"
+
+    # Overview table
+    headers = ["Soubor", "Výkaz", "Rok", "Pokusy OCR", "Status", "Počet problémů"]
+    for col, h in enumerate(headers, start=1):
+        sheet.cell(row=4, column=col, value=h)
+
+    row = 5
+    for r in results:
+        file_name = r.get("original")
+        st = r.get("statement_type")
+        model = r.get("model")
+        rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+        attempts = r.get("ocr_attempts", 1)
+        status = r.get("status", "ok")
+        err_count = len(r.get("validation_errors") or [])
+        values = [file_name, st, rok, attempts, "OK" if status == "ok" else "Chyby", err_count]
+        for col, v in enumerate(values, start=1):
+            sheet.cell(row=row, column=col, value=v)
+        row += 1
+
+    # Statement-level problems
+    start = row + 1
+    sheet.cell(row=start, column=1, value="Problémy ve výkazech (po opakování OCR)")
+    row = start + 1
+    for r in results:
+        errs = r.get("validation_errors") or []
+        if not errs:
+            continue
+        file_name = r.get("original")
+        st = r.get("statement_type")
+        model = r.get("model")
+        rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+        sheet.cell(row=row, column=1, value=f"Soubor: {file_name}")
+        sheet.cell(row=row, column=2, value=f"Výkaz: {st}")
+        sheet.cell(row=row, column=3, value=f"Rok: {rok}")
+        row += 1
+        for msg in errs:
+            sheet.cell(row=row, column=2, value=msg)
+            row += 1
+        row += 1
+
+    # Interstatement issues
+    sheet.cell(row=row, column=1, value="Problémy mezi výkazy a mezi roky")
+    row += 1
+    for msg in inter_issues or []:
+        sheet.cell(row=row, column=2, value=msg)
+        row += 1
+
+
+def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict[str, Any] = None, tolerance: int = 1) -> io.BytesIO:
+    """Export results to DCF template, filling Předmět ocenění, Rozvaha, Výsledovka a Kvalita dat."""
     logger.info(f"Creating DCF template export from {len(results)} results")
     
     # Load the template
@@ -500,6 +622,14 @@ def export_dcf_template(results: List[Dict[str, Any]], disambiguation_info: Dict
     else:
         logger.info("No profit and loss data available, skipping Výsledovka sheet")
     
+    # Add Data Quality report sheet
+    try:
+        from src.services.quality import validate_interstatement
+        inter_issues = validate_interstatement(results, tolerance)
+        add_data_quality_report(workbook, results, inter_issues, tolerance)
+    except Exception as e:
+        logger.error(f"Failed to add Data Quality report: {e}", exc_info=True)
+
     # Save to BytesIO buffer
     buffer = io.BytesIO()
     workbook.save(buffer)
