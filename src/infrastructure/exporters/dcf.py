@@ -199,8 +199,18 @@ def fill_predmet_oceneni_sheet(workbook: openpyxl.Workbook, balance_sheet_result
             if "korekce" in cell_mapping:
                 val = get_attr(row_data, "korekce")
                 if val is not None:
-                    sheet[cell_mapping["korekce"]] = val
-                    logger.debug(f"Set {cell_mapping['korekce']} = {val} (korekce for {row_name})")
+                    # Always write korekce as negative value
+                    norm_val = None
+                    try:
+                        norm_val = int(val)
+                    except Exception:
+                        try:
+                            norm_val = int(float(val))
+                        except Exception:
+                            norm_val = None
+                    to_write = (-abs(norm_val)) if norm_val is not None else val
+                    sheet[cell_mapping["korekce"]] = to_write
+                    logger.debug(f"Set {cell_mapping['korekce']} = {to_write} (korekce for {row_name}, original={val})")
             # Fill netto
             if "netto" in cell_mapping:
                 val = get_attr(row_data, "netto")

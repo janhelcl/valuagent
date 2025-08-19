@@ -19,6 +19,19 @@ class ValidationRule(BaseModel):
             f"(difference: {difference}, tolerance: {tolerance})"
         )
 
+    def validate_netto_minule(self, balance_data: Dict[int, "BalanceSheetRow"], tolerance: int = 0) -> Tuple[bool, str]:
+        """Validate the same hierarchical rules but on the previous-year column (netto_minule)."""
+        target_value = balance_data.get(self.target_row, None).netto_minule if self.target_row in balance_data else 0
+        source_sum = sum(balance_data[s].netto_minule for s in self.source_rows if s in balance_data)
+        difference = abs(target_value - source_sum)
+        if difference <= tolerance:
+            return True, ""
+        return False, (
+            f"Rule validation failed for netto_minule: Row {self.target_row} ({target_value}) != "
+            f"Sum of rows {'+'.join(str(row) for row in self.source_rows)} ({source_sum}) "
+            f"(difference: {difference}, tolerance: {tolerance})"
+        )
+
 
 class FlexibleValidationRule(BaseModel):
     """Represents a flexible validation rule that can handle addition and subtraction."""

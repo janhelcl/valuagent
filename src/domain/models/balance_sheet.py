@@ -55,6 +55,10 @@ class BalanceSheet(BaseModel):
             is_valid, error_msg = rule.validate_netto(self.data, tolerance=tolerance)
             if not is_valid:
                 errors.append(error_msg)
+            # Also validate hierarchical rules for previous year column
+            is_valid_prev, error_msg_prev = rule.validate_netto_minule(self.data, tolerance=tolerance)
+            if not is_valid_prev:
+                errors.append(error_msg_prev)
 
         if errors:
             raise ValueError("Balance sheet validation failed:\n" + "\n".join(f"- {error}" for error in errors))

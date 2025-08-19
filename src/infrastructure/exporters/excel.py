@@ -65,7 +65,17 @@ def export_excel(statement_type: str, model) -> io.BytesIO:
         ws.cell(row=r_idx, column=2, value=row_names.get(int(row_id)))
         if statement_type == "rozvaha":
             ws.cell(row=r_idx, column=3, value=getattr(row_obj, "brutto", None))
-            ws.cell(row=r_idx, column=4, value=getattr(row_obj, "korekce", None))
+            # Always write korekce as negative value
+            korekce_val = getattr(row_obj, "korekce", None)
+            if korekce_val is not None:
+                try:
+                    korekce_val = -abs(int(korekce_val))
+                except Exception:
+                    try:
+                        korekce_val = -abs(int(float(korekce_val)))
+                    except Exception:
+                        pass
+            ws.cell(row=r_idx, column=4, value=korekce_val)
             ws.cell(row=r_idx, column=5, value=getattr(row_obj, "netto", 0))
             ws.cell(row=r_idx, column=6, value=getattr(row_obj, "netto_minule", 0))
         else:

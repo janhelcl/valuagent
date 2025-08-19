@@ -216,6 +216,26 @@ def _format_validation_error(error_msg: str, statement_type: str, tolerance: int
             issues.append(finalize(msg, diff))
             continue
 
+        # Netto_minule rule (Balance sheet previous-year column)
+        m = re.search(r"Rule validation failed for netto_minule: Row (\d+) \(([^)]+)\) != Sum of rows ([^(]+) \(([^)]+)\).*?difference: (\d+)", ln)
+        if m:
+            target_row = int(m.group(1))
+            target_val = m.group(2)
+            src_rows = [p.strip() for p in m.group(3).split("+") if p.strip()]
+            sum_val = m.group(4)
+            diff = m.group(5)
+            src_pretty: list[str] = []
+            for part in src_rows:
+                try:
+                    src_pretty.append(with_row(int(part)))
+                except Exception:
+                    src_pretty.append(part)
+            msg = f"{statement_label}, {with_row(target_row)} (sl. minulé) {target_val} ≠ součet {', '.join(src_prety)} {sum_val}"
+            # fix typo variable name if needed: ensure src_pretty is used
+            msg = msg.replace("{', '.join(src_prety)}", ", ".join(src_pretty))
+            issues.append(finalize(msg, diff))
+            continue
+
         # Flexible PL rule (with + / - expression)
         m = re.search(r"Flexible rule validation failed for ([^:]+): Row (\d+) \(([^)]+)\) != ([^()]+) \(([^)]+)\).*?difference: (\d+)", ln)
         if m:
