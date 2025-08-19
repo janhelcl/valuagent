@@ -154,63 +154,134 @@ async def disambiguate_pdf_bytes_async(pdf_bytes: bytes) -> dict:
     return result
 
 
-def _format_validation_error(error_msg: str, statement_type: str) -> str:
-    """Format validation error messages to be human-readable with row names."""
+def _format_validation_error(error_msg: str, statement_type: str, tolerance: int | None = None) -> list[str]:
+    """Convert technical validation error text into a list of short Czech messages.
+
+    The returned list is suitable for presenting to finance users (e.g., in Excel).
+    """
     from src.shared import utils
-    
-    # Load row names
+    import re
+
+    # Load row names for the given statement
     if statement_type == "rozvaha":
         row_names = utils.load_balance_sheet_row_names()
+        statement_label = "Rozvaha"
     else:
         row_names = utils.load_profit_and_loss_row_names()
-    
-    # Try to extract row numbers and replace with names
-    import re
-    
-    # Pattern for "Row X" or "row X" or "ř. X"
-    def replace_row_ref(match):
-        row_num_str = match.group(1)
-        try:
-            row_num = int(row_num_str)
-            row_name = row_names.get(row_num, f"ř. {row_num}")
-            return f"ř. {row_num} ({row_name})"
-        except ValueError:
-            return match.group(0)
-    
-    # Replace various row reference patterns
-    formatted = re.sub(r'[Rr]ow (\d+)', replace_row_ref, error_msg)
-    formatted = re.sub(r'ř\. (\d+)', replace_row_ref, formatted)
-    
-    # Handle validation rule failures with sums
-    if "Rule validation failed" in formatted:
-        # Pattern: "Row X (value) != Sum of rows Y+Z+... (sum_value)"
-        pattern = r'Row (\d+) \(([^)]+)\) != Sum of rows ([^(]+) \(([^)]+)\)'
-        match = re.search(pattern, formatted)
-        if match:
-            target_row = int(match.group(1))
-            target_value = match.group(2)
-            source_rows_str = match.group(3)
-            sum_value = match.group(4)
-            
-            target_name = row_names.get(target_row, f"ř. {target_row}")
-            
-            # Parse source rows
-            source_parts = []
-            for part in source_rows_str.split('+'):
+        statement_label = "Výsledovka"
+
+    # Trim common Pydantic boilerplate and keep only the core list of issues
+    core = error_msg
+    # Keep text after our explicit failure marker if present
+    for marker in ("Balance sheet validation failed:", "Profit and loss validation failed:"):
+        if marker in core:
+            core = core.split(marker, 1)[1]
+            break
+    # Remove Pydantic headers/footers
+    core = re.sub(r"\s*\[type=.*?\]", "", core)
+    core = re.sub(r"For further information visit .*", "", core)
+
+    issues: list[str] = []
+
+    # Split by lines, consider only those that look like rule messages
+    lines = [ln.strip(" -\t\n") for ln in core.splitlines() if ln.strip()]
+
+    # Helpers
+    def with_row(num: int) -> str:
+        return f"ř. {num} ({row_names.get(num, str(num))})"
+
+    def finalize(msg: str, diff: str | None) -> str:
+        if diff and tolerance is not None:
+            return f"{msg}. Rozdíl {diff} > tolerance {tolerance}."
+        if diff:
+            return f"{msg}. Rozdíl {diff}."
+        return msg
+
+    for ln in lines:
+        # Netto rule (Balance sheet)
+        m = re.search(r"Rule validation failed for netto: Row (\d+) \(([^)]+)\) != Sum of rows ([^(]+) \(([^)]+)\).*?difference: (\d+)", ln)
+        if m:
+            target_row = int(m.group(1))
+            target_val = m.group(2)
+            src_rows = [p.strip() for p in m.group(3).split("+") if p.strip()]
+            sum_val = m.group(4)
+            diff = m.group(5)
+            src_pretty: list[str] = []
+            for part in src_rows:
                 try:
-                    src_row = int(part.strip())
-                    src_name = row_names.get(src_row, f"ř. {src_row}")
-                    source_parts.append(f"ř. {src_row} ({src_name})")
-                except ValueError:
-                    source_parts.append(part.strip())
-            
-            formatted = f"Pravidlo selhalo: ř. {target_row} ({target_name}) = {target_value}, ale součet řádků {' + '.join(source_parts)} = {sum_value}"
-    
-    # Handle brutto-korekce validation
-    if "Brutto - Korekce validation failed" in formatted:
-        formatted = re.sub(r'Brutto - Korekce validation failed:', 'Chyba Brutto - Korekce:', formatted)
-    
-    return formatted
+                    src_pretty.append(with_row(int(part)))
+                except Exception:
+                    src_pretty.append(part)
+            msg = f"{statement_label}, {with_row(target_row)} {target_val} ≠ součet {', '.join(src_pretty)} {sum_val}"
+            issues.append(finalize(msg, diff))
+            continue
+
+        # Flexible PL rule (with + / - expression)
+        m = re.search(r"Flexible rule validation failed for ([^:]+): Row (\d+) \(([^)]+)\) != ([^()]+) \(([^)]+)\).*?difference: (\d+)", ln)
+        if m:
+            field = m.group(1).strip()
+            target_row = int(m.group(2))
+            target_val = m.group(3)
+            expr = m.group(4).strip()
+            calc_val = m.group(5)
+            diff = m.group(6)
+            # Convert expression like 31+35-34 into pretty row refs
+            parts_pretty: list[str] = []
+            token = ""
+            sign = "+"
+            for ch in expr:
+                if ch in "+-":
+                    if token.strip():
+                        try:
+                            num = int(token.strip())
+                            name = with_row(num)
+                        except Exception:
+                            name = token.strip()
+                        parts_pretty.append(("+" if sign == "+" else "−") + " " + name)
+                    sign = ch
+                    token = ""
+                else:
+                    token += ch
+            if token.strip():
+                try:
+                    num = int(token.strip())
+                    name = with_row(num)
+                except Exception:
+                    name = token.strip()
+                parts_pretty.append(("+" if sign == "+" else "−") + " " + name)
+            expr_pretty = " ".join(p.lstrip("+") for p in parts_pretty).strip()
+            msg = f"{statement_label}, {with_row(target_row)} ({field}) {target_val} ≠ {expr_pretty} {calc_val}"
+            issues.append(finalize(msg, diff))
+            continue
+
+        # Brutto - Korekce row-level rule
+        if "Brutto - Korekce validation failed" in ln:
+            # Translate straight to Czech; row number is not included in the message
+            ln_cz = ln.replace("Brutto - Korekce validation failed:", "Chyba kontroly Brutto − Korekce:")
+            # Try to attach difference if present
+            m2 = re.search(r"difference: (\d+)", ln)
+            diff = m2.group(1) if m2 else None
+            issues.append(finalize(f"{statement_label}: {ln_cz}", diff))
+            continue
+
+        # Fallback: replace bare Row N with Czech row + name and keep message concise
+        def repl(match: re.Match[str]) -> str:
+            try:
+                return with_row(int(match.group(1)))
+            except Exception:
+                return match.group(0)
+        short = re.sub(r"[Rr]ow (\d+)", repl, ln)
+        short = re.sub(r"\s+", " ", short).strip()
+        if short:
+            issues.append(short)
+
+    # If nothing was parsed, fall back to one trimmed message
+    if not issues:
+        msg = re.sub(r"\s+", " ", core).strip()
+        if msg:
+            issues = [msg]
+
+    return issues
 
 
 async def ocr_and_validate_with_retries(
@@ -231,7 +302,7 @@ async def ocr_and_validate_with_retries(
     """
     attempts = 0
     last_raw = None
-    final_validation_error = None
+    final_validation_errors: list[str] = []
 
     for attempt in range(1, max_retries + 1):
         attempts = attempt
@@ -269,9 +340,9 @@ async def ocr_and_validate_with_retries(
         except Exception as e:
             # Pydantic validation error or business rule error
             raw_msg = str(e)
-            formatted_msg = _format_validation_error(raw_msg, statement_type)
+            formatted_list = _format_validation_error(raw_msg, statement_type, tolerance)
             logger.info(f"Validation failed on attempt {attempt}: {raw_msg}")
-            final_validation_error = formatted_msg
+            final_validation_errors = formatted_list
             # continue to retry
 
     # All attempts failed; return best-effort model with final error
@@ -305,7 +376,7 @@ async def ocr_and_validate_with_retries(
             logger.error(f"Failed to construct best-effort model: {e}")
 
     # Return only the final validation error (the one from the data we're actually using)
-    validation_errors = [final_validation_error] if final_validation_error else []
+    validation_errors = final_validation_errors if final_validation_errors else []
     
     return {
         "statement_type": statement_type,
