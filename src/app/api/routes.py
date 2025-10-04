@@ -104,6 +104,12 @@ INDEX_HTML = """
       .dropzone.is-dragover { border-color: var(--primary); background: #eef4ff; box-shadow: inset 0 0 0 3px var(--ring); }
       .dropzone strong { color: var(--text); }
       .hint { font-size: 12px; color: #64748b; }
+      /* File list below dropzone */
+      .file-list { list-style: none; margin: 8px 0 0 0; padding: 0; }
+      .file-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+      .file-item + .file-item { margin-top: 6px; }
+      .remove-btn { appearance: none; border: 0; background: transparent; color: #64748b; cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+      .remove-btn:hover { background: #f1f5f9; color: #0f172a; }
       /* Settings panel */
       details.settings { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #f8fafc; }
       details.settings[open] { background: #eef4ff; }
@@ -159,6 +165,7 @@ INDEX_HTML = """
                 <div class="hint">nebo klikněte pro výběr</div>
                 <div id="file-name" class="hint"></div>
               </div>
+              <ul id="file-list" class="file-list" aria-live="polite"></ul>
             </label>
             <div class="hint">Typ výkazu bude rozpoznán automaticky (Rozvaha a/nebo VZZ) pro každý PDF soubor.</div>
 
@@ -207,14 +214,46 @@ INDEX_HTML = """
         const form = document.getElementById('upload-form');
         const submitBtn = document.getElementById('submit-btn');
         const notice = document.getElementById('notice');
-        const aggregate = new DataTransfer();
+        let aggregate = new DataTransfer();
+        const listEl = document.getElementById('file-list');
 
-        const showNames = (files) => {
-          if (!files || files.length === 0) { fileName.textContent = ''; return; }
-          if (files.length === 1) { fileName.textContent = files[0].name; return; }
-          const names = Array.from(files).slice(0, 3).map(f => f.name);
-          const more = files.length > 3 ? ` (+${files.length - 3} více)` : '';
-          fileName.textContent = names.join(', ') + more;
+        const renderList = () => {
+          const files = Array.from(aggregate.files);
+          if (files.length === 0) {
+            fileName.textContent = '';
+            listEl.innerHTML = '';
+            return;
+          }
+          fileName.textContent = `${files.length} soubory`; // simple counter above
+          listEl.innerHTML = '';
+          for (const f of files) {
+            const key = `${f.name}::${f.size}::${f.lastModified||0}`;
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = f.name;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'remove-btn';
+            btn.setAttribute('aria-label', `Odebrat ${f.name}`);
+            btn.textContent = '×';
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+            btn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const newAgg = new DataTransfer();
+              for (const keep of aggregate.files) {
+                const keepKey = `${keep.name}::${keep.size}::${keep.lastModified||0}`;
+                if (keepKey !== key) newAgg.items.add(keep);
+              }
+              aggregate = newAgg;
+              input.files = aggregate.files;
+              renderList();
+            });
+            li.appendChild(nameSpan);
+            li.appendChild(btn);
+            listEl.appendChild(li);
+          }
         };
         const setNotice = (message, type) => {
           notice.textContent = message || '';
@@ -232,10 +271,10 @@ INDEX_HTML = """
             if (!existing.has(key)) { aggregate.items.add(f); existing.add(key); }
           }
           input.files = aggregate.files;
-          showNames(input.files);
+          renderList();
         };
 
-        drop.addEventListener('click', () => input.click());
+        drop.addEventListener('click', () => { input.value = ''; input.click(); });
         drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-dragover'); });
         drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
         drop.addEventListener('drop', (e) => {
