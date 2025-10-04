@@ -207,6 +207,7 @@ INDEX_HTML = """
         const form = document.getElementById('upload-form');
         const submitBtn = document.getElementById('submit-btn');
         const notice = document.getElementById('notice');
+        const aggregate = new DataTransfer();
 
         const showNames = (files) => {
           if (!files || files.length === 0) { fileName.textContent = ''; return; }
@@ -220,6 +221,20 @@ INDEX_HTML = """
           notice.className = 'notice' + (type ? ` notice--${type}` : '');
         };
 
+        const isPdf = (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+        const addFiles = (fileList) => {
+          const incoming = Array.from(fileList || []);
+          if (incoming.length === 0) return;
+          if (!incoming.every(isPdf)) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
+          const existing = new Set(Array.from(aggregate.files).map(f => `${f.name}::${f.size}::${f.lastModified||0}`));
+          for (const f of incoming) {
+            const key = `${f.name}::${f.size}::${f.lastModified||0}`;
+            if (!existing.has(key)) { aggregate.items.add(f); existing.add(key); }
+          }
+          input.files = aggregate.files;
+          showNames(input.files);
+        };
+
         drop.addEventListener('click', () => input.click());
         drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-dragover'); });
         drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
@@ -227,13 +242,10 @@ INDEX_HTML = """
           e.preventDefault();
           drop.classList.remove('is-dragover');
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const allPdf = Array.from(e.dataTransfer.files).every(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-            if (!allPdf) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
-              input.files = e.dataTransfer.files;
-            showNames(input.files);
+            addFiles(e.dataTransfer.files);
           }
         });
-        input.addEventListener('change', () => showNames(input.files));
+        input.addEventListener('change', () => addFiles(input.files));
 
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
