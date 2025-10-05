@@ -77,6 +77,22 @@ def get_sorted_balance_sheets(results: List[Dict[str, Any]]) -> List[Dict[str, A
     return balance_sheets
 
 
+def get_sorted_profit_loss_statements(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get all P&L statements sorted by year (newest first)."""
+    profit_loss = [r for r in results if r["statement_type"] == "vzz"]
+    
+    if not profit_loss:
+        return []
+    
+    # Sort by year (rok) in descending order (newest first)
+    profit_loss.sort(key=lambda x: getattr(x["model"], "rok", 0), reverse=True)
+    
+    years = [getattr(pl["model"], "rok", "unknown") for pl in profit_loss]
+    logger.info(f"Found {len(profit_loss)} P&L statements for years: {years}")
+    
+    return profit_loss
+
+
 def get_row_number_column() -> int:
     """Return the fixed column for row numbers (ř.) - always column D."""
     return 4  # Column D
@@ -234,6 +250,114 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
 
 
+def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List[Dict[str, Any]]) -> None:
+    """Fill numerical data and dates into existing Data - Výsledovka sheet."""
+    sheet_name = "Data - Výsledovka"
+    
+    if sheet_name not in workbook.sheetnames:
+        logger.error(f"Sheet '{sheet_name}' not found in template. Available sheets: {workbook.sheetnames}")
+        raise ValueError(f"Sheet '{sheet_name}' not found in uploaded template")
+    
+    sheet = workbook[sheet_name]
+    
+    if not profit_loss_results:
+        logger.warning("No P&L results available for Data - Výsledovka sheet")
+        return
+    
+    # Limit to 7 years
+    profit_loss_results = profit_loss_results[:7]
+    
+    # Fixed columns: D for row numbers, E for data start
+    row_num_col = get_row_number_column()  # Column D
+    data_start_col = get_data_start_column()  # Column E
+    
+    logger.info(f"Filling {sheet_name} with {len(profit_loss_results)} years starting at column {data_start_col} (row numbers in column {row_num_col})")
+    
+    # Fill dates in row 1 (dd.mm.yyyy format)
+    col_index = data_start_col
+    year_to_column = {}  # Map year to column index (P&L has 1 column per year)
+    
+    for pl_result in profit_loss_results:
+        model = pl_result.get("model")
+        year = getattr(model, "rok", "")
+        
+        if not year:
+            continue
+        
+        # Create date string in dd.mm.yyyy format (31.12.YYYY)
+        date_str = f"31.12.{year}"
+        
+        # P&L: just 1 column per year (not 3 like balance sheet)
+        sheet.cell(row=1, column=col_index, value=date_str)
+        year_to_column[year] = col_index
+        logger.debug(f"Set date for year {year} in column {col_index}")
+        
+        col_index += 1
+    
+    # Create a mapping of row_number -> sheet_row for efficient lookup
+    # Scan the row number column to find where each row ID is located
+    # For P&L, data starts at row 2 (not row 3 like in Rozvaha)
+    row_id_to_sheet_row = {}
+    for row_idx in range(2, sheet.max_row + 1):  # Start from row 2 for P&L
+        cell_value = sheet.cell(row=row_idx, column=row_num_col).value
+        if cell_value is not None:
+            try:
+                # Convert to integer (handles both int and string representations)
+                row_id = int(cell_value)
+                if row_id > 0:
+                    row_id_to_sheet_row[row_id] = row_idx
+            except (ValueError, TypeError):
+                pass
+    
+    logger.info(f"Found {len(row_id_to_sheet_row)} row mappings in template: {list(row_id_to_sheet_row.keys())[:10]}...")
+    logger.info(f"Year to column mapping: {year_to_column}")
+    
+    # Fill data for each year
+    total_filled = 0
+    for year, column in year_to_column.items():
+        pl_result = None
+        for result in profit_loss_results:
+            if getattr(result.get("model"), "rok", None) == year:
+                pl_result = result
+                break
+        
+        if not pl_result:
+            logger.warning(f"No P&L result found for year {year}")
+            continue
+        
+        model = pl_result.get("model")
+        if not model:
+            logger.warning(f"No model found for year {year}")
+            continue
+        
+        logger.info(f"Processing year {year} with {len(model.data)} rows")
+        logger.info(f"Using column {column} for year {year}")
+        
+        filled_count = 0
+        skipped_count = 0
+        for row_id, row_data in model.data.items():
+            # Find which Excel row corresponds to this row_id
+            if row_id not in row_id_to_sheet_row:
+                logger.debug(f"Row ID {row_id} not found in template, skipping")
+                skipped_count += 1
+                continue
+            
+            excel_row = row_id_to_sheet_row[row_id]
+            logger.debug(f"  Processing row_id={row_id} -> excel_row={excel_row}")
+            
+            # P&L uses 'současné' field for current year data
+            value = getattr(row_data, "současné", None)
+            if value is not None:
+                sheet.cell(row=excel_row, column=column, value=value)
+                logger.debug(f"  Filled row {row_id} at ({excel_row}, {column}): {value}")
+                filled_count += 1
+        
+        logger.info(f"Year {year}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
+        total_filled += filled_count
+    
+    logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
+
+
 def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
     """Fill or create the Data - Report Kvality sheet with quality information."""
     sheet_name = "Data - Report Kvality"
@@ -343,7 +467,13 @@ def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, to
     else:
         logger.warning("No balance sheet data found in results")
     
-    # TODO: Fill Data - Výsledovka sheet when implemented
+    # Fill P&L sheet
+    sorted_profit_loss = get_sorted_profit_loss_statements(results)
+    
+    if sorted_profit_loss:
+        fill_vysledovka_sheet(workbook, sorted_profit_loss)
+    else:
+        logger.warning("No P&L data found in results")
     
     # Fill quality report
     try:
