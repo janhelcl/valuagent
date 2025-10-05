@@ -230,9 +230,7 @@ def _format_validation_error(error_msg: str, statement_type: str, tolerance: int
                     src_pretty.append(with_row(int(part)))
                 except Exception:
                     src_pretty.append(part)
-            msg = f"{statement_label}, {with_row(target_row)} (sl. minulé) {target_val} ≠ součet {', '.join(src_prety)} {sum_val}"
-            # fix typo variable name if needed: ensure src_pretty is used
-            msg = msg.replace("{', '.join(src_prety)}", ", ".join(src_pretty))
+            msg = f"{statement_label}, {with_row(target_row)} (sl. minulé) {target_val} ≠ součet {', '.join(src_pretty)} {sum_val}"
             issues.append(finalize(msg, diff))
             continue
 

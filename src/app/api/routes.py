@@ -169,17 +169,23 @@ INDEX_HTML = """
               <ul id="file-list" class="file-list" aria-live="polite"></ul>
             </label>
             <div class="hint">Typ výkazu bude rozpoznán automaticky (Rozvaha a/nebo VZZ) pro každý PDF soubor.</div>
+            
+            <label id="template-label" style="display:none;">
+              Excel Template (pro Data landing formát)
+              <input id="template-input" type="file" name="excel_template" accept=".xlsx,.xls" />
+              <div class="hint">Nahrajte Excel soubor s připravenými listy "Data - Rozvaha" a "Data - Report Kvality"</div>
+            </label>
 
             <details class="settings">
               <summary>Nastavení</summary>
               <div class="settings-body">
                 <label>
                   Formát exportu
-                  <select name="export_format">
+                  <select id="export-format-select" name="export_format">
                     <option value="dcf">DCF template (výchozí)</option>
-                    <option value="data_landing">Data landing (nový formát)</option>
+                    <option value="data_landing">Data landing (vyžaduje Excel template)</option>
                   </select>
-                  <div class="hint">DCF template - klasický formát s Předmět ocenění. Data landing - nový formát s čistými daty.</div>
+                  <div class="hint">DCF template - klasický formát s Předmět ocenění. Data landing - vyplní data do vašeho Excel souboru.</div>
                 </label>
                 <label>
                   Tolerance
@@ -290,6 +296,22 @@ INDEX_HTML = """
         });
         input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
 
+        // Show/hide template input based on export format
+        const exportFormatSelect = document.getElementById('export-format-select');
+        const templateLabel = document.getElementById('template-label');
+        const templateInput = document.getElementById('template-input');
+        
+        exportFormatSelect.addEventListener('change', () => {
+          if (exportFormatSelect.value === 'data_landing') {
+            templateLabel.style.display = 'grid';
+            templateInput.required = true;
+          } else {
+            templateLabel.style.display = 'none';
+            templateInput.required = false;
+            templateInput.value = '';
+          }
+        });
+
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           setNotice('', '');
@@ -297,6 +319,13 @@ INDEX_HTML = """
             setNotice('Nahrajte prosím alespoň jeden PDF soubor.', 'error');
             return;
           }
+          
+          // Check if template is required and provided
+          if (exportFormatSelect.value === 'data_landing' && !templateInput.files.length) {
+            setNotice('Pro Data landing formát je vyžadován Excel template.', 'error');
+            return;
+          }
+          
           submitBtn.disabled = true;
           const previousText = submitBtn.textContent;
           submitBtn.textContent = 'Zpracovávám…';
@@ -382,6 +411,7 @@ async def process_pdf(
     return_json: bool = Form(False),
     ocr_retries: int = Form(None),
     export_format: str = Form("dcf"),  # "dcf" or "data_landing"
+    excel_template: UploadFile = File(None),  # Optional Excel template for data_landing format
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
@@ -478,9 +508,22 @@ async def process_pdf(
 
     # Choose export format based on parameter
     if export_format == "data_landing":
-        # Export using new data landing format
+        # Export using new data landing format - requires Excel template
+        if not excel_template or not excel_template.filename:
+            raise HTTPException(
+                status_code=400, 
+                detail="Pro formát 'data_landing' je vyžadován Excel template. Nahrajte prosím Excel soubor."
+            )
+        
         try:
-            logger.info("Creating data landing export")
+            logger.info(f"Creating data landing export using template: {excel_template.filename}")
+            
+            # Read the Excel template
+            template_content = await excel_template.read()
+            if not template_content:
+                raise HTTPException(status_code=400, detail="Nahrán prázdný Excel template")
+            
+            logger.info(f"Read Excel template: {len(template_content)/1024:.1f}KB")
             
             # Get year for filename
             balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
@@ -491,7 +534,7 @@ async def process_pdf(
             else:
                 filename = "Data_valuagent.xlsx"
             
-            data_buffer = export_data_landing(results, tolerance=tolerance)
+            data_buffer = export_data_landing(results, template_content, tolerance=tolerance)
             
             logger.info(f"Generated data landing export: {filename}")
             return StreamingResponse(
@@ -500,6 +543,10 @@ async def process_pdf(
                 headers={"Content-Disposition": f"attachment; filename={filename}"},
             )
             
+        except ValueError as e:
+            # Handle template validation errors
+            logger.error(f"Template validation error: {e}")
+            raise HTTPException(status_code=400, detail=f"Chyba v template: {str(e)}")
         except Exception as e:
             logger.error(f"Failed to create data landing export: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Selhalo vytvoření exportu: {str(e)}")

@@ -1,20 +1,19 @@
 """
 Data Landing Exporter
 
-This module exports financial statement data in a clean data landing format.
-The format is designed for data warehousing and analysis, with separate sheets:
+This module fills financial statement data into a user-provided Excel template.
+The user's Excel file contains pre-configured sheets with formulas and structure.
+This exporter only fills in the raw data values and dates.
 
-- Data - Rozvaha: Balance sheet data with multiple years
-  * AKTIVA section: 3 columns per year (Brutto, Korekce, Netto)
-  * PASIVA section: 1 column per year (Netto only)
-  * Up to 7 years supported
-  * No filling from previous years (only current year data)
-
-- Data - Výsledovka: P&L data (to be implemented)
+- Data - Rozvaha: Fill numerical values and dates
+  * AKTIVA section: Fills Brutto, Korekce, Netto values
+  * PASIVA section: Fills Netto values only
+  * Dates are filled in dd.mm.yyyy format at the top of columns
+  * Only data values are filled - structure is pre-filled by user
 
 - Data - Report Kvality: Quality report with validation results
 
-This is an alternative to the DCF template export, focused on clean data structure.
+The user uploads their Excel template along with PDFs, and we fill in the data.
 """
 
 import io
@@ -78,14 +77,25 @@ def get_sorted_balance_sheets(results: List[Dict[str, Any]]) -> List[Dict[str, A
     return balance_sheets
 
 
-def create_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[Dict[str, Any]]) -> None:
-    """Create and fill the Data - Rozvaha sheet with balance sheet data."""
+def get_row_number_column() -> int:
+    """Return the fixed column for row numbers (ř.) - always column D."""
+    return 4  # Column D
+
+
+def get_data_start_column() -> int:
+    """Return the fixed column where data starts - always column E."""
+    return 5  # Column E (after column D)
+
+
+def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[Dict[str, Any]]) -> None:
+    """Fill numerical data and dates into existing Data - Rozvaha sheet."""
     sheet_name = "Data - Rozvaha"
     
-    if sheet_name in workbook.sheetnames:
-        sheet = workbook[sheet_name]
-    else:
-        sheet = workbook.create_sheet(sheet_name)
+    if sheet_name not in workbook.sheetnames:
+        logger.error(f"Sheet '{sheet_name}' not found in template. Available sheets: {workbook.sheetnames}")
+        raise ValueError(f"Sheet '{sheet_name}' not found in uploaded template")
+    
+    sheet = workbook[sheet_name]
     
     if not balance_sheet_results:
         logger.warning("No balance sheet results available for Data - Rozvaha sheet")
@@ -94,84 +104,103 @@ def create_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: Lis
     # Limit to 7 years
     balance_sheet_results = balance_sheet_results[:7]
     
-    structure = load_balance_sheet_structure()
+    # Fixed columns: D for row numbers, E for data start
+    row_num_col = get_row_number_column()  # Column D
+    data_start_col = get_data_start_column()  # Column E
     
-    # Get all unique row IDs from all balance sheets
-    all_row_ids = set()
-    for bs_result in balance_sheet_results:
-        model = bs_result.get("model")
-        if model is not None:
-            all_row_ids.update(model.data.keys())
+    logger.info(f"Filling {sheet_name} with {len(balance_sheet_results)} years starting at column {data_start_col} (row numbers in column {row_num_col})")
     
-    sorted_row_ids = sorted(all_row_ids)
-    
-    # Determine which rows are in AKTIVA (1-77) vs PASIVA (78+)
-    # Based on standard Czech accounting, row 78 starts PASIVA section
-    aktiva_rows = [rid for rid in sorted_row_ids if rid < 78]
-    pasiva_rows = [rid for rid in sorted_row_ids if rid >= 78]
-    
-    # Setup columns A, B, C, D (prefilled structure)
-    # Row 1: headers
-    sheet['C1'] = "v tis. Kč"
-    sheet['D1'] = "ř."
-    
-    # Row 2: sub-headers (will be filled below for data columns)
-    # Row 3 starts with AKTIVA CELKEM header
-    sheet['B3'] = "AKTIVA CELKEM"
-    sheet['C3'] = "1"
-    
-    # Fill year headers (row 1) and sub-headers (row 2) for AKTIVA section
-    col_index = 5  # Start from column E
-    year_columns = []  # Track column positions for later use in PASIVA
+    # Fill dates in row 1 (dd.mm.yyyy format)
+    col_index = data_start_col
+    year_to_columns = {}  # Map year to list of column indices
     
     for bs_result in balance_sheet_results:
         model = bs_result.get("model")
         year = getattr(model, "rok", "")
         
-        # Create date string (12/31/YYYY)
-        date_str = f"12/31/{year}" if year else ""
+        if not year:
+            continue
         
-        # For AKTIVA section, we need 3 columns per year
-        # Merge cells for year header
-        year_col_letter = get_column_letter(col_index)
-        netto_col_letter = get_column_letter(col_index + 2)
-        sheet.merge_cells(f"{year_col_letter}1:{netto_col_letter}1")
-        sheet[f"{year_col_letter}1"] = date_str
-        sheet[f"{year_col_letter}1"].alignment = Alignment(horizontal='center')
-        sheet[f"{year_col_letter}1"].font = Font(bold=True)
+        # Create date string in dd.mm.yyyy format (31.12.YYYY)
+        date_str = f"31.12.{year}"
         
-        # Sub-headers
-        sheet[f"{year_col_letter}2"] = "Brutto"
-        sheet[f"{get_column_letter(col_index + 1)}2"] = "Korekce"
-        sheet[f"{netto_col_letter}2"] = "Netto"
+        # Store column positions for this year
+        year_columns = []
         
-        # Store the netto column for PASIVA section (single column per year)
-        year_columns.append((date_str, col_index + 2))  # Store netto column index
+        # AKTIVA section: 3 columns per year (Brutto, Korekce, Netto)
+        # Fill the same date for all 3 columns
+        for i in range(3):
+            sheet.cell(row=1, column=col_index, value=date_str)
+            year_columns.append(col_index)
+            col_index += 1
         
-        col_index += 3
+        year_to_columns[year] = year_columns
+        logger.debug(f"Set dates for year {year} in columns {year_columns}")
     
-    # Fill AKTIVA data rows
-    current_row = 3
-    for row_id in aktiva_rows:
-        current_row += 1
-        row_info = structure.get(row_id, {})
-        row_name = row_info.get("name", f"Row {row_id}")
+    # Create a mapping of row_number -> sheet_row for efficient lookup
+    # Scan the row number column to find where each row ID is located
+    row_id_to_sheet_row = {}
+    for row_idx in range(3, sheet.max_row + 1):
+        cell_value = sheet.cell(row=row_idx, column=row_num_col).value
+        if cell_value is not None:
+            try:
+                # Convert to integer (handles both int and string representations)
+                row_id = int(cell_value)
+                if row_id > 0:
+                    row_id_to_sheet_row[row_id] = row_idx
+            except (ValueError, TypeError):
+                pass
+    
+    logger.info(f"Found {len(row_id_to_sheet_row)} row mappings in template: {list(row_id_to_sheet_row.keys())[:10]}...")
+    logger.info(f"Year to columns mapping: {year_to_columns}")
+    
+    # Fill data for each year
+    total_filled = 0
+    for year, columns in year_to_columns.items():
+        bs_result = None
+        for result in balance_sheet_results:
+            if getattr(result.get("model"), "rok", None) == year:
+                bs_result = result
+                break
         
-        # Columns A, B, C, D
-        # Column A: row label (simplified - you may want to add hierarchical labels)
-        sheet[f"B{current_row}"] = row_name
-        sheet[f"C{current_row}"] = row_id
+        if not bs_result:
+            logger.warning(f"No balance sheet result found for year {year}")
+            continue
         
-        # Fill data for each year
-        col_index = 5
-        for bs_result in balance_sheet_results:
-            model = bs_result.get("model")
-            if model is not None and row_id in model.data:
-                row_data = model.data[row_id]
-                
+        model = bs_result.get("model")
+        if not model:
+            logger.warning(f"No model found for year {year}")
+            continue
+        
+        logger.info(f"Processing year {year} with {len(model.data)} rows")
+        
+        # columns = [brutto_col, korekce_col, netto_col]
+        brutto_col, korekce_col, netto_col = columns
+        logger.info(f"Using columns for year {year}: Brutto={brutto_col}, Korekce={korekce_col}, Netto={netto_col}")
+        
+        filled_count = 0
+        skipped_count = 0
+        for row_id, row_data in model.data.items():
+            # Find which Excel row corresponds to this row_id
+            if row_id not in row_id_to_sheet_row:
+                logger.debug(f"Row ID {row_id} not found in template, skipping")
+                skipped_count += 1
+                continue
+            
+            excel_row = row_id_to_sheet_row[row_id]
+            logger.debug(f"  Processing row_id={row_id} -> excel_row={excel_row}")
+            
+            # Determine if this is AKTIVA or PASIVA
+            # AKTIVA (< 78): Fill Brutto, Korekce, Netto
+            # PASIVA (>= 78): Fill only Netto (in the third column position)
+            
+            if row_id < 78:
+                # AKTIVA section - fill all 3 columns
                 # Brutto
                 brutto_val = getattr(row_data, "brutto", None)
-                sheet.cell(row=current_row, column=col_index, value=brutto_val)
+                if brutto_val is not None:
+                    sheet.cell(row=excel_row, column=brutto_col, value=brutto_val)
+                    logger.debug(f"  Filled row {row_id} Brutto at ({excel_row}, {brutto_col}): {brutto_val}")
                 
                 # Korekce (as negative)
                 korekce_val = getattr(row_data, "korekce", None)
@@ -180,68 +209,44 @@ def create_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: Lis
                         korekce_val = -abs(int(korekce_val))
                     except Exception:
                         pass
-                sheet.cell(row=current_row, column=col_index + 1, value=korekce_val)
+                    sheet.cell(row=excel_row, column=korekce_col, value=korekce_val)
+                    logger.debug(f"  Filled row {row_id} Korekce at ({excel_row}, {korekce_col}): {korekce_val}")
                 
                 # Netto
-                netto_val = getattr(row_data, "netto", 0)
-                sheet.cell(row=current_row, column=col_index + 2, value=netto_val)
+                netto_val = getattr(row_data, "netto", None)
+                if netto_val is not None:
+                    sheet.cell(row=excel_row, column=netto_col, value=netto_val)
+                    logger.debug(f"  Filled row {row_id} Netto at ({excel_row}, {netto_col}): {netto_val}")
+                
+                filled_count += 1
             else:
-                # Fill with 0 or leave empty
-                sheet.cell(row=current_row, column=col_index, value=0)
-                sheet.cell(row=current_row, column=col_index + 1, value=0)
-                sheet.cell(row=current_row, column=col_index + 2, value=0)
-            
-            col_index += 3
-    
-    # Add PASIVA CELKEM section
-    current_row += 2
-    pasiva_start_row = current_row
-    
-    sheet[f"B{pasiva_start_row}"] = "PASIVA CELKEM"
-    sheet[f"C{pasiva_start_row}"] = "78"
-    
-    # For PASIVA, setup headers - only one column per year
-    # Use the stored column positions from AKTIVA section
-    for date_str, col_idx in year_columns:
-        col_letter = get_column_letter(col_idx)
-        sheet[f"{col_letter}{pasiva_start_row}"] = date_str
-        sheet[f"{col_letter}{pasiva_start_row}"].font = Font(bold=True)
-    
-    # Fill PASIVA data rows
-    for row_id in pasiva_rows:
-        current_row += 1
-        row_info = structure.get(row_id, {})
-        row_name = row_info.get("name", f"Row {row_id}")
+                # PASIVA section - fill only Netto column
+                netto_val = getattr(row_data, "netto", None)
+                if netto_val is not None:
+                    # For PASIVA, use the netto column position
+                    sheet.cell(row=excel_row, column=netto_col, value=netto_val)
+                    logger.debug(f"  Filled PASIVA row {row_id} Netto at ({excel_row}, {netto_col}): {netto_val}")
+                filled_count += 1
         
-        sheet[f"B{current_row}"] = row_name
-        sheet[f"C{current_row}"] = row_id
-        
-        # Fill data for each year (only netto for PASIVA)
-        # Use the same column positions as headers
-        for idx, (date_str, col_idx) in enumerate(year_columns):
-            bs_result = balance_sheet_results[idx]
-            model = bs_result.get("model")
-            if model is not None and row_id in model.data:
-                row_data = model.data[row_id]
-                netto_val = getattr(row_data, "netto", 0)
-                sheet.cell(row=current_row, column=col_idx, value=netto_val)
-            else:
-                sheet.cell(row=current_row, column=col_idx, value=0)
+        logger.info(f"Year {year}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
+        total_filled += filled_count
     
-    logger.info(f"Successfully created {sheet_name} sheet with {len(balance_sheet_results)} years")
+    logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
 
 
-def create_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
-    """Create the Data - Report Kvality sheet with quality information."""
+def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
+    """Fill or create the Data - Report Kvality sheet with quality information."""
     sheet_name = "Data - Report Kvality"
     
     if sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
+        logger.info(f"Found existing '{sheet_name}' sheet, clearing and filling with data")
         # Clear existing content
         for row in sheet.iter_rows():
             for cell in row:
                 cell.value = None
     else:
+        logger.info(f"Creating new '{sheet_name}' sheet")
         sheet = workbook.create_sheet(sheet_name)
     
     # Header
@@ -311,39 +316,42 @@ def create_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[
     logger.info(f"Successfully created {sheet_name} sheet")
 
 
-def export_data_landing(results: List[Dict[str, Any]], tolerance: int = 1) -> io.BytesIO:
+def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, tolerance: int = 1) -> io.BytesIO:
     """
-    Export results to a new data landing format with sheets:
-    - Data - Rozvaha
-    - Data - Výsledovka (not implemented yet)
-    - Data - Report Kvality
+    Fill financial data into user-provided Excel template.
+    
+    Args:
+        results: Processed financial statement results
+        template_bytes: User's Excel template file as bytes
+        tolerance: Validation tolerance
+    
+    Returns:
+        BytesIO buffer with filled Excel file
     """
-    logger.info(f"Creating data landing export from {len(results)} results")
+    logger.info(f"Filling data landing template with {len(results)} results")
     
-    # Create new workbook
-    workbook = openpyxl.Workbook()
-    
-    # Remove default sheet
-    if "Sheet" in workbook.sheetnames:
-        del workbook["Sheet"]
+    # Load the user's template
+    template_buffer = io.BytesIO(template_bytes)
+    workbook = openpyxl.load_workbook(template_buffer)
+    logger.info(f"Loaded template with sheets: {workbook.sheetnames}")
     
     # Get sorted balance sheets
     sorted_balance_sheets = get_sorted_balance_sheets(results)
     
     if sorted_balance_sheets:
-        create_rozvaha_sheet(workbook, sorted_balance_sheets)
+        fill_rozvaha_sheet(workbook, sorted_balance_sheets)
     else:
         logger.warning("No balance sheet data found in results")
     
-    # TODO: Add Data - Výsledovka sheet
+    # TODO: Fill Data - Výsledovka sheet when implemented
     
-    # Add quality report
+    # Fill quality report
     try:
         from src.services.quality import validate_interstatement
         inter_issues = validate_interstatement(results, tolerance)
-        create_quality_report_sheet(workbook, results, inter_issues, tolerance)
+        fill_quality_report_sheet(workbook, results, inter_issues, tolerance)
     except Exception as e:
-        logger.error(f"Failed to add quality report: {e}", exc_info=True)
+        logger.error(f"Failed to fill quality report: {e}", exc_info=True)
     
     # Save to BytesIO buffer
     buffer = io.BytesIO()
