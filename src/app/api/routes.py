@@ -451,12 +451,6 @@ INDEX_HTML = """
           const previousText = submitBtn.textContent;
           submitBtn.textContent = 'Zpracovávám…';
           
-          // Show progress messages
-          setTimeout(() => addChatMessage('Nahrávám soubory na server...', 'info'), 300);
-          setTimeout(() => addChatMessage('Rozpoznávám typ výkazů (Rozvaha / VZZ)...', 'info'), 600);
-          setTimeout(() => addChatMessage('Extrahuji data pomocí OCR s umělou inteligencí...', 'info'), 1200);
-          setTimeout(() => addChatMessage('Kontroluji správnost dat a součty...', 'info'), 2000);
-          
           try {
             const formData = new FormData(form);
             // Rebuild PDF files from selectedFiles
@@ -466,55 +460,57 @@ INDEX_HTML = """
             // Add template
             formData.delete('excel_template');
             if (selectedTemplate) formData.append('excel_template', selectedTemplate, selectedTemplate.name);
-            const response = await fetch('/process', { method: 'POST', body: formData });
-            const contentType = response.headers.get('content-type') || '';
+            
+            // Use SSE for real-time progress
+            const response = await fetch('/process-stream', { method: 'POST', body: formData });
+            
             if (!response.ok) {
-              let message = 'Zpracování selhalo. Zkuste to prosím znovu.';
-              if (contentType.includes('application/json')) {
-                const data = await response.json().catch(() => null);
-                if (data && (data.detail || data.message)) {
-                  message = data.detail || data.message;
-                }
-              } else {
-                const text = await response.text().catch(() => '');
-                if (text) message = text;
-              }
-              setNotice(message, 'error');
-              addChatMessage(`Něco se nepovedlo: ${message}`, 'error');
+              const text = await response.text().catch(() => '');
+              setNotice(text || 'Zpracování selhalo', 'error');
+              addChatMessage(`Chyba: ${text || 'Zpracování selhalo'}`, 'error');
               return;
             }
-
-            addChatMessage('Vytvářím váš Excel soubor...', 'info');
             
-            if (contentType.includes('application/zip')) {
-              const blob = await response.blob();
+            // Read SSE stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let downloadData = null;
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\\n\\n');
+              buffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = JSON.parse(line.substring(6));
+                
+                if (data.type === 'download') {
+                  // Store download data for later
+                  downloadData = data;
+                } else {
+                  // Regular progress message
+                  addChatMessage(data.message, data.type || 'info');
+                }
+              }
+            }
+            
+            // Trigger download if we have data
+            if (downloadData) {
+              const blob = base64ToBlob(downloadData.data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
               const url = window.URL.createObjectURL(blob);
-              const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-              const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent_results.zip';
               const a = document.createElement('a');
-              a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
-              window.URL.revokeObjectURL(url);
-              setNotice('ZIP byl úspěšně stažen.', 'success');
-              addChatMessage('Hotovo! ZIP soubor byl úspěšně stažen. Můžete zpracovat další výkazy.', 'success');
-            } else if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-              const blob = await response.blob();
-              const url = window.URL.createObjectURL(blob);
-              const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-              const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent.xlsx';
-              const a = document.createElement('a');
-              a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
+              a.href = url;
+              a.download = downloadData.filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
               window.URL.revokeObjectURL(url);
               setNotice('Excel byl úspěšně stažen.', 'success');
-              addChatMessage(`Perfektní! Excel soubor "${suggestedName}" byl úspěšně stažen. Všechna data jsou zkontrolovaná a připravená k použití.`, 'success');
-            } else if (contentType.includes('application/json')) {
-              const data = await response.json();
-              setNotice(data ? JSON.stringify(data) : 'Obdržena odpověď JSON.', 'success');
-              addChatMessage('Zpracování dokončeno (JSON odpověď).', 'success');
-            } else {
-              setNotice('Neznámá odpověď serveru.', 'error');
-              addChatMessage('Došlo k neočekávané odpovědi od serveru.', 'error');
             }
           } catch (err) {
             setNotice('Chyba sítě. Zkontrolujte připojení a zkuste to znovu.', 'error');
@@ -524,6 +520,16 @@ INDEX_HTML = """
             submitBtn.textContent = previousText;
           }
         });
+        
+        // Helper function to convert base64 to Blob
+        function base64ToBlob(base64, mimeType) {
+          const byteCharacters = atob(base64);
+          const byteArrays = [];
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteArrays.push(byteCharacters.charCodeAt(i));
+          }
+          return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
+        }
       })();
     </script>
   </body>
@@ -757,6 +763,169 @@ async def process_pdf(
             headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
     )
 
+
+@router.post("/process-stream")
+@limiter.limit("10/minute")
+async def process_pdf_stream(
+    request: Request,
+    pdfs: list[UploadFile] = File(...),
+    tolerance: int = Form(1),
+    ocr_retries: int = Form(None),
+    excel_template: UploadFile = File(None),
+    offset: int = Form(0),
+):
+    """Process PDFs with real-time progress updates via Server-Sent Events"""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Nejste přihlášeni.")
+
+    import json
+    import base64
+    import asyncio
+
+    # Read all files BEFORE creating the generator (UploadFile objects will be closed after this function scope)
+    logger.info(f"Reading {len(pdfs)} uploaded PDF files")
+    file_payloads: list[tuple[str, bytes]] = []
+    for i, f in enumerate(pdfs):
+        content = await f.read()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"Uploaded file '{f.filename}' is empty")
+        filename = f.filename or f"soubor_{i+1}.pdf"
+        file_payloads.append((filename, content))
+        logger.info(f"File {i+1}: {filename} ({len(content)/1024:.1f}KB)")
+
+    # Read template
+    if not excel_template or not excel_template.filename:
+        raise HTTPException(status_code=400, detail="Excel template is required")
+    
+    template_content = await excel_template.read()
+    if not template_content:
+        raise HTTPException(status_code=400, detail="Excel template is empty")
+    
+    template_filename = excel_template.filename
+    logger.info(f"Excel template read: {template_filename} ({len(template_content)/1024:.1f}KB)")
+
+    async def event_generator():
+        try:
+            # Helper to send SSE message
+            def send_event(message: str, event_type: str = "info"):
+                return f"data: {json.dumps({'message': message, 'type': event_type})}\n\n"
+
+            yield send_event(f"Načítám {len(file_payloads)} {'soubor' if len(file_payloads) == 1 else 'soubory' if len(file_payloads) < 5 else 'souborů'}...")
+
+            # Report loaded files
+            for filename, content in file_payloads:
+                yield send_event(f"✓ Načten: {filename} ({len(content)/1024:.1f} KB)")
+            
+            yield send_event(f"✓ Excel template načten: {template_filename}")
+            
+            # Determine max retries
+            max_retries = ocr_retries if ocr_retries is not None else config.get_ocr_max_retries()
+            if not isinstance(max_retries, int):
+                max_retries = config.get_ocr_max_retries()
+            max_retries = max(1, min(max_retries, 5))
+
+            # Process all files concurrently
+            yield send_event(f"🚀 Spouštím paralelní zpracování {len(file_payloads)} {'souboru' if len(file_payloads) == 1 else 'souborů'}...")
+            
+            async def process_single_file(original_name: str, pdf_bytes: bytes, file_idx: int):
+                """Process a single file and yield progress events"""
+                results = []
+                
+                # Disambiguate
+                info = await disambiguate_pdf_bytes_async(pdf_bytes)
+                
+                present_types: list[str] = []
+                if info.get("rozvaha"):
+                    present_types.append("rozvaha")
+                if info.get("vzz"):
+                    present_types.append("vzz")
+                
+                if not present_types:
+                    return []  # No statements found
+                
+                detected = ", ".join(["Rozvaha" if t == "rozvaha" else "Výkaz zisku a ztráty" for t in present_types])
+                
+                # Process each statement type concurrently
+                tasks = []
+                for st_type in present_types:
+                    tasks.append(ocr_and_validate_with_retries(pdf_bytes, st_type, tolerance, max_retries))
+                
+                statement_results = await asyncio.gather(*tasks)
+                
+                for st_type, result_obj in zip(present_types, statement_results):
+                    result_obj = dict(result_obj)
+                    result_obj["original"] = original_name
+                    result_obj["statement_type"] = st_type
+                    result_obj["disambiguation_info"] = info
+                    results.append(result_obj)
+                
+                return results
+            
+            # Create tasks for all files
+            file_tasks = [
+                process_single_file(name, bytes_, idx + 1) 
+                for idx, (name, bytes_) in enumerate(file_payloads)
+            ]
+            
+            # Process with progress tracking
+            all_results = []
+            completed = 0
+            for task in asyncio.as_completed(file_tasks):
+                file_results = await task
+                completed += 1
+                
+                if file_results:
+                    first_result = file_results[0]
+                    original_name = first_result.get("original", "?")
+                    detected_types = [r.get("statement_type") for r in file_results]
+                    detected_names = [("Rozvaha" if t == "rozvaha" else "VZZ") for t in detected_types]
+                    
+                    for result in file_results:
+                        st_type = result.get("statement_type")
+                        st_name = "Rozvaha" if st_type == "rozvaha" else "VZZ"
+                        
+                        if result.get("status") == "ok":
+                            model = result.get("model")
+                            rok = getattr(model, "rok", "?")
+                            attempts = result.get("ocr_attempts", 1)
+                            data_rows = len(getattr(model, "data", {}))
+                            yield send_event(f"✅ {original_name} - {st_name}: rok {rok}, {data_rows} řádků ({completed}/{len(file_payloads)} hotovo)")
+                        else:
+                            yield send_event(f"⚠ {original_name} - {st_name}: zpracováno s chybami", "error")
+                    
+                    all_results.extend(file_results)
+                else:
+                    yield send_event(f"⚠ Soubor {completed}/{len(file_payloads)}: žádný výkaz rozpoznán", "error")
+            
+            if not all_results:
+                yield send_event("Žádné výkazy nebyly úspěšně zpracovány", "error")
+                return
+            
+            # Create Excel
+            yield send_event("📊 Vytvářím Excel soubor s vašimi daty...")
+            
+            balance_sheets = [r for r in all_results if r["statement_type"] == "rozvaha"]
+            if balance_sheets:
+                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+                year = getattr(latest_bs["model"], "rok", "")
+                filename = f"Data_valuagent_{year}.xlsx"
+            else:
+                filename = "Data_valuagent.xlsx"
+            
+            data_buffer = export_data_landing(all_results, template_content, tolerance=tolerance, offset=offset)
+            
+            # Convert buffer to base64 for transmission
+            excel_b64 = base64.b64encode(data_buffer.getvalue()).decode('utf-8')
+            
+            yield send_event("✅ Excel soubor je připraven ke stažení!", "success")
+            yield f"data: {json.dumps({'type': 'download', 'filename': filename, 'data': excel_b64})}\n\n"
+            yield send_event("🎉 Hotovo! Můžete zpracovat další výkazy.", "success")
+            
+        except Exception as e:
+            logger.error(f"Error in processing stream: {e}", exc_info=True)
+            yield send_event(f"Chyba při zpracování: {str(e)}", "error")
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Pretty login page (form-based)
