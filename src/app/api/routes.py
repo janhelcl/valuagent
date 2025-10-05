@@ -159,7 +159,7 @@ INDEX_HTML = """
           <form id="upload-form" action="/process" method="post" enctype="multipart/form-data" autocomplete="off">
             <label>
               Soubory (PDF)
-              <input id="file-input" type="file" name="pdfs" accept="application/pdf" multiple required style="display:none" />
+              <input id="file-input" type="file" name="pdfs" accept="application/pdf" multiple style="display:none" />
               <div id="dropzone" class="dropzone">
                 <strong>Přetáhněte sem PDF soubory</strong>
                 <div class="hint">nebo klikněte pro výběr</div>
@@ -214,11 +214,11 @@ INDEX_HTML = """
         const form = document.getElementById('upload-form');
         const submitBtn = document.getElementById('submit-btn');
         const notice = document.getElementById('notice');
-        let aggregate = new DataTransfer();
+        let selectedFiles = [];
         const listEl = document.getElementById('file-list');
 
         const renderList = () => {
-          const files = Array.from(aggregate.files);
+          const files = selectedFiles.slice();
           if (files.length === 0) {
             fileName.textContent = '';
             listEl.innerHTML = '';
@@ -241,13 +241,7 @@ INDEX_HTML = """
             btn.addEventListener('click', (e) => {
               e.preventDefault();
               e.stopPropagation();
-              const newAgg = new DataTransfer();
-              for (const keep of aggregate.files) {
-                const keepKey = `${keep.name}::${keep.size}::${keep.lastModified||0}`;
-                if (keepKey !== key) newAgg.items.add(keep);
-              }
-              aggregate = newAgg;
-              input.files = aggregate.files;
+              selectedFiles = selectedFiles.filter(sf => `${sf.name}::${sf.size}::${sf.lastModified||0}` !== key);
               renderList();
             });
             li.appendChild(nameSpan);
@@ -265,16 +259,17 @@ INDEX_HTML = """
           const incoming = Array.from(fileList || []);
           if (incoming.length === 0) return;
           if (!incoming.every(isPdf)) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
-          const existing = new Set(Array.from(aggregate.files).map(f => `${f.name}::${f.size}::${f.lastModified||0}`));
+          const existing = new Set(selectedFiles.map(f => `${f.name}::${f.size}::${f.lastModified||0}`));
+          const added = [];
           for (const f of incoming) {
             const key = `${f.name}::${f.size}::${f.lastModified||0}`;
-            if (!existing.has(key)) { aggregate.items.add(f); existing.add(key); }
+            if (!existing.has(key)) { added.push(f); existing.add(key); }
           }
-          input.files = aggregate.files;
+          if (added.length > 0) selectedFiles = selectedFiles.concat(added);
           renderList();
         };
 
-        drop.addEventListener('click', () => { input.value = ''; input.click(); });
+        drop.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); input.value = ''; input.click(); });
         drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-dragover'); });
         drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
         drop.addEventListener('drop', (e) => {
@@ -284,16 +279,24 @@ INDEX_HTML = """
             addFiles(e.dataTransfer.files);
           }
         });
-        input.addEventListener('change', () => addFiles(input.files));
+        input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
 
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           setNotice('', '');
+          if (selectedFiles.length === 0) {
+            setNotice('Nahrajte prosím alespoň jeden PDF soubor.', 'error');
+            return;
+          }
           submitBtn.disabled = true;
           const previousText = submitBtn.textContent;
           submitBtn.textContent = 'Zpracovávám…';
           try {
             const formData = new FormData(form);
+            // Always rebuild files from selectedFiles to ensure added/removed items are respected
+            formData.delete('pdfs');
+            const filesToSend = selectedFiles.slice();
+            for (const f of filesToSend) formData.append('pdfs', f, f.name);
             const response = await fetch('/process', { method: 'POST', body: formData });
             const contentType = response.headers.get('content-type') || '';
             if (!response.ok) {
