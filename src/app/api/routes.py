@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 from src.infrastructure.exporters.excel import export_excel
 from src.infrastructure.exporters.dcf import export_dcf_template
+from src.infrastructure.exporters.data_landing import export_data_landing
 from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async, ocr_and_validate_with_retries
 from src.infrastructure import config
 
@@ -172,6 +173,14 @@ INDEX_HTML = """
             <details class="settings">
               <summary>Nastavení</summary>
               <div class="settings-body">
+                <label>
+                  Formát exportu
+                  <select name="export_format">
+                    <option value="dcf">DCF template (výchozí)</option>
+                    <option value="data_landing">Data landing (nový formát)</option>
+                  </select>
+                  <div class="hint">DCF template - klasický formát s Předmět ocenění. Data landing - nový formát s čistými daty.</div>
+                </label>
                 <label>
                   Tolerance
                   <input type="number" name="tolerance" value="1" min="0" placeholder="0 = přísné porovnání" />
@@ -372,6 +381,7 @@ async def process_pdf(
     tolerance: int = Form(1),
     return_json: bool = Form(False),
     ocr_retries: int = Form(None),
+    export_format: str = Form("dcf"),  # "dcf" or "data_landing"
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
@@ -466,7 +476,35 @@ async def process_pdf(
         ]
         return JSONResponse(payload)
 
-    # Export using DCF template with Předmět ocenění sheet filled
+    # Choose export format based on parameter
+    if export_format == "data_landing":
+        # Export using new data landing format
+        try:
+            logger.info("Creating data landing export")
+            
+            # Get year for filename
+            balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
+            if balance_sheets:
+                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+                year = getattr(latest_bs["model"], "rok", "")
+                filename = f"Data_valuagent_{year}.xlsx"
+            else:
+                filename = "Data_valuagent.xlsx"
+            
+            data_buffer = export_data_landing(results, tolerance=tolerance)
+            
+            logger.info(f"Generated data landing export: {filename}")
+            return StreamingResponse(
+                data_buffer,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create data landing export: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Selhalo vytvoření exportu: {str(e)}")
+    
+    # Default: Export using DCF template with Předmět ocenění sheet filled
     try:
         logger.info("Creating DCF template export")
         
