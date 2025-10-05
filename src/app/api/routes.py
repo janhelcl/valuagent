@@ -824,78 +824,106 @@ async def process_pdf_stream(
                 max_retries = config.get_ocr_max_retries()
             max_retries = max(1, min(max_retries, 5))
 
-            # Process all files concurrently
+            # Process all files concurrently with real-time progress
             yield send_event(f"🚀 Spouštím paralelní zpracování {len(file_payloads)} {'souboru' if len(file_payloads) == 1 else 'souborů'}...")
             
-            async def process_single_file(original_name: str, pdf_bytes: bytes, file_idx: int):
-                """Process a single file and yield progress events"""
-                results = []
-                
-                # Disambiguate
-                info = await disambiguate_pdf_bytes_async(pdf_bytes)
-                
-                present_types: list[str] = []
-                if info.get("rozvaha"):
-                    present_types.append("rozvaha")
-                if info.get("vzz"):
-                    present_types.append("vzz")
-                
-                if not present_types:
-                    return []  # No statements found
-                
-                detected = ", ".join(["Rozvaha" if t == "rozvaha" else "Výkaz zisku a ztráty" for t in present_types])
-                
-                # Process each statement type concurrently
-                tasks = []
-                for st_type in present_types:
-                    tasks.append(ocr_and_validate_with_retries(pdf_bytes, st_type, tolerance, max_retries))
-                
-                statement_results = await asyncio.gather(*tasks)
-                
-                for st_type, result_obj in zip(present_types, statement_results):
-                    result_obj = dict(result_obj)
-                    result_obj["original"] = original_name
-                    result_obj["statement_type"] = st_type
-                    result_obj["disambiguation_info"] = info
-                    results.append(result_obj)
-                
-                return results
+            # Create a queue for real-time progress messages
+            progress_queue = asyncio.Queue()
             
-            # Create tasks for all files
+            async def process_single_file(original_name: str, pdf_bytes: bytes, file_idx: int):
+                """Process a single file and send progress events"""
+                try:
+                    # Disambiguate
+                    await progress_queue.put(("info", f"🔍 {original_name}: rozpoznávám typ výkazů..."))
+                    info = await disambiguate_pdf_bytes_async(pdf_bytes)
+                    
+                    present_types: list[str] = []
+                    if info.get("rozvaha"):
+                        present_types.append("rozvaha")
+                    if info.get("vzz"):
+                        present_types.append("vzz")
+                    
+                    if not present_types:
+                        await progress_queue.put(("error", f"⚠ {original_name}: žádný výkaz rozpoznán"))
+                        return []
+                    
+                    detected_names = [("Rozvaha" if t == "rozvaha" else "Výkaz zisku a ztráty") for t in present_types]
+                    statements_text = " a ".join(detected_names)
+                    await progress_queue.put(("info", f"📄 {original_name}: nalezeno {statements_text}"))
+                    
+                    # Process each statement type and report as soon as each completes
+                    async def process_statement(st_type: str):
+                        """Process a single statement type and report immediately"""
+                        st_name_full = "Rozvahu" if st_type == "rozvaha" else "Výkaz zisku a ztráty"
+                        st_name_short = "Rozvaha" if st_type == "rozvaha" else "VZZ"
+                        
+                        await progress_queue.put(("info", f"🤖 {original_name} - {st_name_full}: extrahuji pomocí AI..."))
+                        
+                        result_obj = await ocr_and_validate_with_retries(pdf_bytes, st_type, tolerance, max_retries)
+                        result_obj = dict(result_obj)
+                        result_obj["original"] = original_name
+                        result_obj["statement_type"] = st_type
+                        result_obj["disambiguation_info"] = info
+                        
+                        # Report completion immediately
+                        if result_obj.get("status") == "ok":
+                            model = result_obj.get("model")
+                            rok = getattr(model, "rok", "?")
+                            attempts = result_obj.get("ocr_attempts", 1)
+                            data_rows = len(getattr(model, "data", {}))
+                            await progress_queue.put(("success", f"✅ {original_name} - {st_name_short}: rok {rok}, {data_rows} řádků"))
+                        else:
+                            await progress_queue.put(("error", f"⚠ {original_name} - {st_name_short}: zpracováno s chybami"))
+                        
+                        return result_obj
+                    
+                    # Process all statement types concurrently and collect results
+                    statement_tasks = [process_statement(st_type) for st_type in present_types]
+                    results = await asyncio.gather(*statement_tasks)
+                    
+                    return list(results)
+                except Exception as e:
+                    await progress_queue.put(("error", f"❌ {original_name}: chyba - {str(e)}"))
+                    logger.error(f"Error processing {original_name}: {e}", exc_info=True)
+                    return []
+            
+            # Start all file processing tasks
             file_tasks = [
-                process_single_file(name, bytes_, idx + 1) 
+                asyncio.create_task(process_single_file(name, bytes_, idx + 1))
                 for idx, (name, bytes_) in enumerate(file_payloads)
             ]
             
-            # Process with progress tracking
+            # Monitor progress queue and yield events in real-time
             all_results = []
-            completed = 0
-            for task in asyncio.as_completed(file_tasks):
-                file_results = await task
-                completed += 1
+            completed_tasks = 0
+            total_tasks = len(file_tasks)
+            
+            while completed_tasks < total_tasks:
+                # Check for progress messages (non-blocking with timeout)
+                try:
+                    event_type, message = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                    yield send_event(message, event_type)
+                except asyncio.TimeoutError:
+                    pass
                 
-                if file_results:
-                    first_result = file_results[0]
-                    original_name = first_result.get("original", "?")
-                    detected_types = [r.get("statement_type") for r in file_results]
-                    detected_names = [("Rozvaha" if t == "rozvaha" else "VZZ") for t in detected_types]
-                    
-                    for result in file_results:
-                        st_type = result.get("statement_type")
-                        st_name = "Rozvaha" if st_type == "rozvaha" else "VZZ"
-                        
-                        if result.get("status") == "ok":
-                            model = result.get("model")
-                            rok = getattr(model, "rok", "?")
-                            attempts = result.get("ocr_attempts", 1)
-                            data_rows = len(getattr(model, "data", {}))
-                            yield send_event(f"✅ {original_name} - {st_name}: rok {rok}, {data_rows} řádků ({completed}/{len(file_payloads)} hotovo)")
-                        else:
-                            yield send_event(f"⚠ {original_name} - {st_name}: zpracováno s chybami", "error")
-                    
-                    all_results.extend(file_results)
-                else:
-                    yield send_event(f"⚠ Soubor {completed}/{len(file_payloads)}: žádný výkaz rozpoznán", "error")
+                # Check if any tasks completed
+                done_tasks = [t for t in file_tasks if t.done()]
+                if len(done_tasks) > completed_tasks:
+                    for task in done_tasks[completed_tasks:]:
+                        try:
+                            file_results = await task
+                            all_results.extend(file_results)
+                        except Exception as e:
+                            logger.error(f"Task failed: {e}", exc_info=True)
+                    completed_tasks = len(done_tasks)
+            
+            # Drain any remaining messages in the queue
+            while not progress_queue.empty():
+                try:
+                    event_type, message = progress_queue.get_nowait()
+                    yield send_event(message, event_type)
+                except asyncio.QueueEmpty:
+                    break
             
             if not all_results:
                 yield send_event("Žádné výkazy nebyly úspěšně zpracovány", "error")
