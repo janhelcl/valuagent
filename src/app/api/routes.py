@@ -136,10 +136,23 @@ INDEX_HTML = """
       .segmented button.is-active { background: var(--primary); color: #fff; }
       .segmented button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff, 0 0 0 4px var(--ring); position: relative; z-index: 1; }
 
-      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; }
+      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; display: flex; flex-direction: column; max-height: 600px; }
       @media (max-width: 920px) { .aside { border: 0; padding: 0; } }
       .list { margin: 0; padding-left: 18px; color: #222; }
       .list li { margin: 6px 0; color: #334155; }
+
+      /* Chat log styles */
+      .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #f8fafc; border-radius: 12px; min-height: 200px; max-height: 500px; }
+      .chat-message { display: flex; gap: 10px; align-items: flex-start; animation: slideIn 0.3s ease-out; }
+      @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .chat-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #1f57c7); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+      .chat-message--system .chat-avatar { background: linear-gradient(135deg, #64748b, #475569); }
+      .chat-message--success .chat-avatar { background: linear-gradient(135deg, #10b981, #059669); }
+      .chat-message--error .chat-avatar { background: linear-gradient(135deg, #ef4444, #dc2626); }
+      .chat-content { flex: 1; }
+      .chat-text { background: #fff; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; color: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+      .chat-message--system .chat-text { background: #e2e8f0; color: #475569; }
+      .chat-timestamp { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
       .footer { color: #a9b4d0; font-size: 12px; text-align: center; margin-top: 8px; }
     </style>
@@ -207,18 +220,15 @@ INDEX_HTML = """
           </form>
         </div>
         <aside class="aside">
-          <p class="section-title">Jak to funguje</p>
-          <ol class="list">
-            <li>Nahrajte PDF českého účetního výkazu.</li>
-            <li>Vyberte typ výkazu a případně toleranci.</li>
-            <li>Data vytěžíme, zkontrolujeme a předáme čistý Excel.</li>
-          </ol>
-          <p class="section-title" style="margin-top:16px">Proč Valuagent</p>
-          <ul class="list">
-            <li>Optimalizováno pro Rozvahu a Výkaz zisku a ztráty.</li>
-            <li>Kontrolní pravidla zvýrazní nesrovnalosti.</li>
-            <li>Připravený export pro analýzu a reportování.</li>
-          </ul>
+          <p class="section-title">Průběh zpracování</p>
+          <div id="chat-log" class="chat-log">
+            <div class="chat-message chat-message--system">
+              <div class="chat-avatar">🤖</div>
+              <div class="chat-content">
+                <div class="chat-text">Ahoj! Jsem připraven zpracovat vaše účetní výkazy. Nahrajte PDF soubory a Excel template a klikněte na tlačítko Zpracovat.</div>
+              </div>
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -227,6 +237,38 @@ INDEX_HTML = """
 
     <script>
       (function(){
+        // Chat log functionality
+        const chatLog = document.getElementById('chat-log');
+        
+        const addChatMessage = (text, type = 'info') => {
+          const message = document.createElement('div');
+          message.className = `chat-message chat-message--${type}`;
+          
+          const avatar = document.createElement('div');
+          avatar.className = 'chat-avatar';
+          avatar.textContent = type === 'error' ? '❌' : type === 'success' ? '✅' : '🤖';
+          
+          const content = document.createElement('div');
+          content.className = 'chat-content';
+          
+          const textEl = document.createElement('div');
+          textEl.className = 'chat-text';
+          textEl.textContent = text;
+          
+          content.appendChild(textEl);
+          message.appendChild(avatar);
+          message.appendChild(content);
+          chatLog.appendChild(message);
+          
+          // Auto-scroll to bottom
+          chatLog.scrollTop = chatLog.scrollHeight;
+        };
+        
+        const clearChatLog = () => {
+          chatLog.innerHTML = '';
+        };
+
+        // PDF files handling (multiple files)
         const drop = document.getElementById('dropzone');
         const input = document.getElementById('file-input');
         const fileName = document.getElementById('file-name');
@@ -277,14 +319,25 @@ INDEX_HTML = """
         const addFiles = (fileList) => {
           const incoming = Array.from(fileList || []);
           if (incoming.length === 0) return;
-          if (!incoming.every(isPdf)) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
+          if (!incoming.every(isPdf)) { 
+            alert('Nahrajte prosím pouze soubory PDF.'); 
+            addChatMessage('Musíte nahrát pouze PDF soubory.', 'error');
+            return; 
+          }
           const existing = new Set(selectedFiles.map(f => `${f.name}::${f.size}::${f.lastModified||0}`));
           const added = [];
           for (const f of incoming) {
             const key = `${f.name}::${f.size}::${f.lastModified||0}`;
             if (!existing.has(key)) { added.push(f); existing.add(key); }
           }
-          if (added.length > 0) selectedFiles = selectedFiles.concat(added);
+          if (added.length > 0) {
+            selectedFiles = selectedFiles.concat(added);
+            if (added.length === 1) {
+              addChatMessage(`Přidán PDF soubor: ${added[0].name}`, 'info');
+            } else {
+              addChatMessage(`Přidáno ${added.length} PDF souborů.`, 'info');
+            }
+          }
           renderList();
         };
 
@@ -346,9 +399,18 @@ INDEX_HTML = """
         const setTemplate = (fileList) => {
           const incoming = Array.from(fileList || []);
           if (incoming.length === 0) return;
-          if (incoming.length > 1) { alert('Nahrajte prosím pouze jeden Excel soubor.'); return; }
-          if (!isExcel(incoming[0])) { alert('Nahrajte prosím Excel soubor (.xlsx nebo .xls).'); return; }
+          if (incoming.length > 1) { 
+            alert('Nahrajte prosím pouze jeden Excel soubor.'); 
+            addChatMessage('Můžete nahrát pouze jeden Excel template.', 'error');
+            return; 
+          }
+          if (!isExcel(incoming[0])) { 
+            alert('Nahrajte prosím Excel soubor (.xlsx nebo .xls).'); 
+            addChatMessage('Soubor musí být ve formátu Excel (.xlsx nebo .xls).', 'error');
+            return; 
+          }
           selectedTemplate = incoming[0];
+          addChatMessage(`Excel template nahrán: ${selectedTemplate.name}`, 'info');
           renderTemplateList();
         };
 
@@ -370,18 +432,31 @@ INDEX_HTML = """
           setNotice('', '');
           if (selectedFiles.length === 0) {
             setNotice('Nahrajte prosím alespoň jeden PDF soubor.', 'error');
+            addChatMessage('Chyba: Nejsou nahrány žádné PDF soubory.', 'error');
             return;
           }
           
           // Check if template is provided
           if (!selectedTemplate) {
             setNotice('Nahrajte prosím Excel template.', 'error');
+            addChatMessage('Chyba: Není nahrán Excel template.', 'error');
             return;
           }
+          
+          // Clear previous messages and start processing
+          clearChatLog();
+          addChatMessage(`Výborně! Mám ${selectedFiles.length} ${selectedFiles.length === 1 ? 'PDF soubor' : selectedFiles.length < 5 ? 'PDF soubory' : 'PDF souborů'} a Excel template.`, 'info');
           
           submitBtn.disabled = true;
           const previousText = submitBtn.textContent;
           submitBtn.textContent = 'Zpracovávám…';
+          
+          // Show progress messages
+          setTimeout(() => addChatMessage('Nahrávám soubory na server...', 'info'), 300);
+          setTimeout(() => addChatMessage('Rozpoznávám typ výkazů (Rozvaha / VZZ)...', 'info'), 600);
+          setTimeout(() => addChatMessage('Extrahuji data pomocí OCR s umělou inteligencí...', 'info'), 1200);
+          setTimeout(() => addChatMessage('Kontroluji správnost dat a součty...', 'info'), 2000);
+          
           try {
             const formData = new FormData(form);
             // Rebuild PDF files from selectedFiles
@@ -405,9 +480,12 @@ INDEX_HTML = """
                 if (text) message = text;
               }
               setNotice(message, 'error');
+              addChatMessage(`Něco se nepovedlo: ${message}`, 'error');
               return;
             }
 
+            addChatMessage('Vytvářím váš Excel soubor...', 'info');
+            
             if (contentType.includes('application/zip')) {
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
@@ -418,6 +496,7 @@ INDEX_HTML = """
               a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
               window.URL.revokeObjectURL(url);
               setNotice('ZIP byl úspěšně stažen.', 'success');
+              addChatMessage('Hotovo! ZIP soubor byl úspěšně stažen. Můžete zpracovat další výkazy.', 'success');
             } else if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
               const blob = await response.blob();
               const url = window.URL.createObjectURL(blob);
@@ -428,14 +507,18 @@ INDEX_HTML = """
               a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
               window.URL.revokeObjectURL(url);
               setNotice('Excel byl úspěšně stažen.', 'success');
+              addChatMessage(`Perfektní! Excel soubor "${suggestedName}" byl úspěšně stažen. Všechna data jsou zkontrolovaná a připravená k použití.`, 'success');
             } else if (contentType.includes('application/json')) {
               const data = await response.json();
               setNotice(data ? JSON.stringify(data) : 'Obdržena odpověď JSON.', 'success');
+              addChatMessage('Zpracování dokončeno (JSON odpověď).', 'success');
             } else {
               setNotice('Neznámá odpověď serveru.', 'error');
+              addChatMessage('Došlo k neočekávané odpovědi od serveru.', 'error');
             }
           } catch (err) {
             setNotice('Chyba sítě. Zkontrolujte připojení a zkuste to znovu.', 'error');
+            addChatMessage('Chyba připojení k serveru. Zkontrolujte prosím své internetové připojení.', 'error');
           } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = previousText;
