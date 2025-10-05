@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 from src.infrastructure.exporters.excel import export_excel
 from src.infrastructure.exporters.dcf import export_dcf_template
+from src.infrastructure.exporters.data_landing import export_data_landing
 from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async, ocr_and_validate_with_retries
 from src.infrastructure import config
 
@@ -86,9 +87,10 @@ INDEX_HTML = """
       @media (max-width: 920px) {
         .card { grid-template-columns: 1fr; }
       }
+      .card > div:first-child { display: flex; flex-direction: column; }
       .section-title { font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
 
-      form { display: grid; gap: 14px; }
+      form { display: grid; gap: 14px; flex: 1; }
       label { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
       input[type="number"], select {
         border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 16px;
@@ -116,16 +118,19 @@ INDEX_HTML = """
       details.settings summary { cursor: pointer; font-weight: 600; color: var(--text); list-style: none; }
       details.settings summary::-webkit-details-marker { display: none; }
       .settings-body { margin-top: 8px; display: grid; gap: 10px; }
-      .notice { margin-top: 6px; font-size: 14px; display: none; }
+      .notice { margin-top: 6px; margin-bottom: 8px; font-size: 14px; display: none; }
       .notice--error { color: #b91c1c; display: block; }
       .notice--success { color: #166534; display: block; }
 
-      .actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-      button[type="submit"] {
-        background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-size: 16px; font-weight: 600; cursor: pointer;
+      button[type="submit"], .reset-btn {
+        background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer;
         box-shadow: 0 8px 20px rgba(43, 110, 246, .35);
+        transition: all 0.15s ease;
+        display: flex; align-items: center; gap: 8px; justify-content: center;
+        margin-top: auto;
       }
-      button[type="submit"]:hover { background: var(--primary-600); }
+      button[type="submit"]:hover, .reset-btn:hover { background: var(--primary-600); }
+      button[type="submit"]:active, .reset-btn:active { transform: scale(0.98); }
       button[disabled] { opacity: .7; cursor: not-allowed; box-shadow: none; }
 
       /* Segmented switch */
@@ -135,10 +140,23 @@ INDEX_HTML = """
       .segmented button.is-active { background: var(--primary); color: #fff; }
       .segmented button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff, 0 0 0 4px var(--ring); position: relative; z-index: 1; }
 
-      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; }
+      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; display: flex; flex-direction: column; }
       @media (max-width: 920px) { .aside { border: 0; padding: 0; } }
       .list { margin: 0; padding-left: 18px; color: #222; }
       .list li { margin: 6px 0; color: #334155; }
+
+      /* Chat log styles */
+      .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #f8fafc; border-radius: 12px; min-height: 200px; max-height: 500px; }
+      .chat-message { display: flex; gap: 10px; align-items: flex-start; animation: slideIn 0.3s ease-out; }
+      @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .chat-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #1f57c7); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+      .chat-message--system .chat-avatar { background: linear-gradient(135deg, #64748b, #475569); }
+      .chat-message--success .chat-avatar { background: linear-gradient(135deg, #10b981, #059669); }
+      .chat-message--error .chat-avatar { background: linear-gradient(135deg, #ef4444, #dc2626); }
+      .chat-content { flex: 1; }
+      .chat-text { background: #fff; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; color: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+      .chat-message--system .chat-text { background: #e2e8f0; color: #475569; }
+      .chat-timestamp { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
       .footer { color: #a9b4d0; font-size: 12px; text-align: center; margin-top: 8px; }
     </style>
@@ -158,7 +176,7 @@ INDEX_HTML = """
           <p class="section-title">Nahrát</p>
           <form id="upload-form" action="/process" method="post" enctype="multipart/form-data" autocomplete="off">
             <label>
-              Soubory (PDF)
+              Vstupní soubory obsahující výkazy (PDF)
               <input id="file-input" type="file" name="pdfs" accept="application/pdf" multiple style="display:none" />
               <div id="dropzone" class="dropzone">
                 <strong>Přetáhněte sem PDF soubory</strong>
@@ -168,10 +186,28 @@ INDEX_HTML = """
               <ul id="file-list" class="file-list" aria-live="polite"></ul>
             </label>
             <div class="hint">Typ výkazu bude rozpoznán automaticky (Rozvaha a/nebo VZZ) pro každý PDF soubor.</div>
+            
+            <label>
+              Excel pro výstup
+              <input id="template-input" type="file" name="excel_template" accept=".xlsx,.xls" style="display:none" />
+              <div id="template-dropzone" class="dropzone">
+                <strong>Přetáhněte sem Excel soubor</strong>
+                <div class="hint">nebo klikněte pro výběr</div>
+                <div id="template-file-name" class="hint"></div>
+              </div>
+              <ul id="template-file-list" class="file-list" aria-live="polite"></ul>
+            </label>
+            <div class="hint">Nahrajte Excel soubor s připravenými listy "Data - Rozvaha", "Data - Výsledovka" a "Data - Report Kvality"</div>
 
             <details class="settings">
               <summary>Nastavení</summary>
               <div class="settings-body">
+                <input type="hidden" name="export_format" value="data_landing" />
+                <label>
+                  Offset
+                  <input id="offset-input" type="number" name="offset" value="0" min="0" max="7" />
+                  <div class="hint">Kolik období (let) zleva přeskočit. 0 = bez přeskočení (standardní), 1 = začít vyplňovat od druhého sloupce, atd. Užitečné když nejnovější data ještě nejsou k dispozici.</div>
+                </label>
                 <label>
                   Tolerance
                   <input type="number" name="tolerance" value="1" min="0" placeholder="0 = přísné porovnání" />
@@ -180,26 +216,27 @@ INDEX_HTML = """
               </div>
             </details>
 
-            <div class="actions">
-              <button id="submit-btn" type="submit">Zpracovat a stáhnout Excel</button>
-              <span class="hint">Po úspěšném zpracování se stáhne soubor .xlsx.</span>
-            </div>
             <div id="notice" class="notice" aria-live="polite"></div>
+            <button id="submit-btn" type="submit">
+              <span>📊</span>
+              <span>Zpracovat a stáhnout Excel</span>
+            </button>
           </form>
         </div>
         <aside class="aside">
-          <p class="section-title">Jak to funguje</p>
-          <ol class="list">
-            <li>Nahrajte PDF českého účetního výkazu.</li>
-            <li>Vyberte typ výkazu a případně toleranci.</li>
-            <li>Data vytěžíme, zkontrolujeme a předáme čistý Excel.</li>
-          </ol>
-          <p class="section-title" style="margin-top:16px">Proč Valuagent</p>
-          <ul class="list">
-            <li>Optimalizováno pro Rozvahu a Výkaz zisku a ztráty.</li>
-            <li>Kontrolní pravidla zvýrazní nesrovnalosti.</li>
-            <li>Připravený export pro analýzu a reportování.</li>
-          </ul>
+          <p class="section-title">Průběh zpracování</p>
+          <div id="chat-log" class="chat-log">
+            <div class="chat-message chat-message--system">
+              <div class="chat-avatar">🤖</div>
+              <div class="chat-content">
+                <div class="chat-text">Ahoj! Jsem připraven zpracovat vaše účetní výkazy. Nahrajte PDF soubory a Excel template a klikněte na tlačítko Zpracovat.</div>
+              </div>
+            </div>
+          </div>
+          <button id="reset-btn" class="reset-btn" type="button">
+            <span>🔄</span>
+            <span>Resetovat vše</span>
+          </button>
         </aside>
       </div>
 
@@ -208,6 +245,38 @@ INDEX_HTML = """
 
     <script>
       (function(){
+        // Chat log functionality
+        const chatLog = document.getElementById('chat-log');
+        
+        const addChatMessage = (text, type = 'info') => {
+          const message = document.createElement('div');
+          message.className = `chat-message chat-message--${type}`;
+          
+          const avatar = document.createElement('div');
+          avatar.className = 'chat-avatar';
+          avatar.textContent = type === 'error' ? '❌' : type === 'success' ? '✅' : '🤖';
+          
+          const content = document.createElement('div');
+          content.className = 'chat-content';
+          
+          const textEl = document.createElement('div');
+          textEl.className = 'chat-text';
+          textEl.textContent = text;
+          
+          content.appendChild(textEl);
+          message.appendChild(avatar);
+          message.appendChild(content);
+          chatLog.appendChild(message);
+          
+          // Auto-scroll to bottom
+          chatLog.scrollTop = chatLog.scrollHeight;
+        };
+        
+        const clearChatLog = () => {
+          chatLog.innerHTML = '';
+        };
+
+        // PDF files handling (multiple files)
         const drop = document.getElementById('dropzone');
         const input = document.getElementById('file-input');
         const fileName = document.getElementById('file-name');
@@ -258,14 +327,25 @@ INDEX_HTML = """
         const addFiles = (fileList) => {
           const incoming = Array.from(fileList || []);
           if (incoming.length === 0) return;
-          if (!incoming.every(isPdf)) { alert('Nahrajte prosím pouze soubory PDF.'); return; }
+          if (!incoming.every(isPdf)) { 
+            alert('Nahrajte prosím pouze soubory PDF.'); 
+            addChatMessage('Musíte nahrát pouze PDF soubory.', 'error');
+            return; 
+          }
           const existing = new Set(selectedFiles.map(f => `${f.name}::${f.size}::${f.lastModified||0}`));
           const added = [];
           for (const f of incoming) {
             const key = `${f.name}::${f.size}::${f.lastModified||0}`;
             if (!existing.has(key)) { added.push(f); existing.add(key); }
           }
-          if (added.length > 0) selectedFiles = selectedFiles.concat(added);
+          if (added.length > 0) {
+            selectedFiles = selectedFiles.concat(added);
+            if (added.length === 1) {
+              addChatMessage(`Přidán PDF soubor: ${added[0].name}`, 'info');
+            } else {
+              addChatMessage(`Přidáno ${added.length} PDF souborů.`, 'info');
+            }
+          }
           renderList();
         };
 
@@ -281,71 +361,208 @@ INDEX_HTML = """
         });
         input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
 
+        // Excel template handling (single file only)
+        const templateDrop = document.getElementById('template-dropzone');
+        const templateInput = document.getElementById('template-input');
+        const templateFileName = document.getElementById('template-file-name');
+        const templateListEl = document.getElementById('template-file-list');
+        let selectedTemplate = null;
+
+        const renderTemplateList = () => {
+          if (!selectedTemplate) {
+            templateFileName.textContent = '';
+            templateListEl.innerHTML = '';
+            return;
+          }
+          templateFileName.textContent = '1 soubor';
+          templateListEl.innerHTML = '';
+          const li = document.createElement('li');
+          li.className = 'file-item';
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = selectedTemplate.name;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'remove-btn';
+          btn.setAttribute('aria-label', `Odebrat ${selectedTemplate.name}`);
+          btn.textContent = '×';
+          btn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectedTemplate = null;
+            renderTemplateList();
+          });
+          li.appendChild(nameSpan);
+          li.appendChild(btn);
+          templateListEl.appendChild(li);
+        };
+
+        const isExcel = (f) => {
+          const name = f.name.toLowerCase();
+          return name.endsWith('.xlsx') || name.endsWith('.xls') || 
+                 f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                 f.type === 'application/vnd.ms-excel';
+        };
+        
+        const setTemplate = (fileList) => {
+          const incoming = Array.from(fileList || []);
+          if (incoming.length === 0) return;
+          if (incoming.length > 1) { 
+            alert('Nahrajte prosím pouze jeden Excel soubor.'); 
+            addChatMessage('Můžete nahrát pouze jeden Excel template.', 'error');
+            return; 
+          }
+          if (!isExcel(incoming[0])) { 
+            alert('Nahrajte prosím Excel soubor (.xlsx nebo .xls).'); 
+            addChatMessage('Soubor musí být ve formátu Excel (.xlsx nebo .xls).', 'error');
+            return; 
+          }
+          selectedTemplate = incoming[0];
+          addChatMessage(`Excel template nahrán: ${selectedTemplate.name}`, 'info');
+          renderTemplateList();
+        };
+
+        templateDrop.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); templateInput.value = ''; templateInput.click(); });
+        templateDrop.addEventListener('dragover', (e) => { e.preventDefault(); templateDrop.classList.add('is-dragover'); });
+        templateDrop.addEventListener('dragleave', () => templateDrop.classList.remove('is-dragover'));
+        templateDrop.addEventListener('drop', (e) => {
+          e.preventDefault();
+          templateDrop.classList.remove('is-dragover');
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setTemplate(e.dataTransfer.files);
+          }
+        });
+        templateInput.addEventListener('change', () => { setTemplate(templateInput.files); templateInput.value = ''; });
+
+        // Form submission
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           setNotice('', '');
           if (selectedFiles.length === 0) {
             setNotice('Nahrajte prosím alespoň jeden PDF soubor.', 'error');
+            addChatMessage('Chyba: Nejsou nahrány žádné PDF soubory.', 'error');
             return;
           }
+          
+          // Check if template is provided
+          if (!selectedTemplate) {
+            setNotice('Nahrajte prosím Excel template.', 'error');
+            addChatMessage('Chyba: Není nahrán Excel template.', 'error');
+            return;
+          }
+          
+          // Clear previous messages and start processing
+          clearChatLog();
+          addChatMessage(`Výborně! Mám ${selectedFiles.length} ${selectedFiles.length === 1 ? 'PDF soubor' : selectedFiles.length < 5 ? 'PDF soubory' : 'PDF souborů'} a Excel template.`, 'info');
+          
           submitBtn.disabled = true;
           const previousText = submitBtn.textContent;
           submitBtn.textContent = 'Zpracovávám…';
+          
           try {
             const formData = new FormData(form);
-            // Always rebuild files from selectedFiles to ensure added/removed items are respected
+            // Rebuild PDF files from selectedFiles
             formData.delete('pdfs');
             const filesToSend = selectedFiles.slice();
             for (const f of filesToSend) formData.append('pdfs', f, f.name);
-            const response = await fetch('/process', { method: 'POST', body: formData });
-            const contentType = response.headers.get('content-type') || '';
+            // Add template
+            formData.delete('excel_template');
+            if (selectedTemplate) formData.append('excel_template', selectedTemplate, selectedTemplate.name);
+            
+            // Use SSE for real-time progress
+            const response = await fetch('/process-stream', { method: 'POST', body: formData });
+            
             if (!response.ok) {
-              let message = 'Zpracování selhalo. Zkuste to prosím znovu.';
-              if (contentType.includes('application/json')) {
-                const data = await response.json().catch(() => null);
-                if (data && (data.detail || data.message)) {
-                  message = data.detail || data.message;
-                }
-              } else {
-                const text = await response.text().catch(() => '');
-                if (text) message = text;
-              }
-              setNotice(message, 'error');
+              const text = await response.text().catch(() => '');
+              setNotice(text || 'Zpracování selhalo', 'error');
+              addChatMessage(`Chyba: ${text || 'Zpracování selhalo'}`, 'error');
               return;
             }
-
-            if (contentType.includes('application/zip')) {
-              const blob = await response.blob();
+            
+            // Read SSE stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let downloadData = null;
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\\n\\n');
+              buffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = JSON.parse(line.substring(6));
+                
+                if (data.type === 'download') {
+                  // Store download data for later
+                  downloadData = data;
+                } else {
+                  // Regular progress message
+                  addChatMessage(data.message, data.type || 'info');
+                }
+              }
+            }
+            
+            // Trigger download if we have data
+            if (downloadData) {
+              const blob = base64ToBlob(downloadData.data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
               const url = window.URL.createObjectURL(blob);
-              const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-              const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent_results.zip';
               const a = document.createElement('a');
-              a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
-              window.URL.revokeObjectURL(url);
-              setNotice('ZIP byl úspěšně stažen.', 'success');
-            } else if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-              const blob = await response.blob();
-              const url = window.URL.createObjectURL(blob);
-              const disposition = response.headers.get('content-disposition') || '';
-              const fileNameMatch = /filename\\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-              const suggestedName = fileNameMatch ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2]) : 'valuagent.xlsx';
-              const a = document.createElement('a');
-              a.href = url; a.download = suggestedName; document.body.appendChild(a); a.click(); a.remove();
+              a.href = url;
+              a.download = downloadData.filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
               window.URL.revokeObjectURL(url);
               setNotice('Excel byl úspěšně stažen.', 'success');
-            } else if (contentType.includes('application/json')) {
-              const data = await response.json();
-              setNotice(data ? JSON.stringify(data) : 'Obdržena odpověď JSON.', 'success');
-            } else {
-              setNotice('Neznámá odpověď serveru.', 'error');
             }
           } catch (err) {
             setNotice('Chyba sítě. Zkontrolujte připojení a zkuste to znovu.', 'error');
+            addChatMessage('Chyba připojení k serveru. Zkontrolujte prosím své internetové připojení.', 'error');
           } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = previousText;
           }
+        });
+        
+        // Helper function to convert base64 to Blob
+        function base64ToBlob(base64, mimeType) {
+          const byteCharacters = atob(base64);
+          const byteArrays = [];
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteArrays.push(byteCharacters.charCodeAt(i));
+          }
+          return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
+        }
+        
+        // Reset button functionality
+        const resetBtn = document.getElementById('reset-btn');
+        resetBtn.addEventListener('click', () => {
+          // Clear selected files
+          selectedFiles = [];
+          renderList();
+          
+          // Clear selected template
+          selectedTemplate = null;
+          renderTemplateList();
+          
+          // Reset form
+          form.reset();
+          
+          // Clear and reset chat log
+          clearChatLog();
+          addChatMessage('Ahoj! Jsem připraven zpracovat vaše účetní výkazy. Nahrajte PDF soubory a Excel template a klikněte na tlačítko Zpracovat.', 'system');
+          
+          // Clear notice
+          setNotice('', '');
+          
+          // Re-enable submit button if it was disabled
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>📊</span><span>Zpracovat a stáhnout Excel</span>';
         });
       })();
     </script>
@@ -372,6 +589,9 @@ async def process_pdf(
     tolerance: int = Form(1),
     return_json: bool = Form(False),
     ocr_retries: int = Form(None),
+    export_format: str = Form("data_landing"),  # Always use data_landing format
+    excel_template: UploadFile = File(None),  # Required Excel template for data_landing format
+    offset: int = Form(0),  # Number of years to skip from the left (data_landing only)
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
@@ -466,7 +686,52 @@ async def process_pdf(
         ]
         return JSONResponse(payload)
 
-    # Export using DCF template with Předmět ocenění sheet filled
+    # Choose export format based on parameter
+    if export_format == "data_landing":
+        # Export using new data landing format - requires Excel template
+        if not excel_template or not excel_template.filename:
+            raise HTTPException(
+                status_code=400, 
+                detail="Pro formát 'data_landing' je vyžadován Excel template. Nahrajte prosím Excel soubor."
+            )
+        
+        try:
+            logger.info(f"Creating data landing export using template: {excel_template.filename}")
+            
+            # Read the Excel template
+            template_content = await excel_template.read()
+            if not template_content:
+                raise HTTPException(status_code=400, detail="Nahrán prázdný Excel template")
+            
+            logger.info(f"Read Excel template: {len(template_content)/1024:.1f}KB")
+            
+            # Get year for filename
+            balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
+            if balance_sheets:
+                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+                year = getattr(latest_bs["model"], "rok", "")
+                filename = f"Data_valuagent_{year}.xlsx"
+            else:
+                filename = "Data_valuagent.xlsx"
+            
+            data_buffer = export_data_landing(results, template_content, tolerance=tolerance, offset=offset)
+            
+            logger.info(f"Generated data landing export: {filename}")
+            return StreamingResponse(
+                data_buffer,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={filename}"},
+            )
+            
+        except ValueError as e:
+            # Handle template validation errors
+            logger.error(f"Template validation error: {e}")
+            raise HTTPException(status_code=400, detail=f"Chyba v template: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to create data landing export: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Selhalo vytvoření exportu: {str(e)}")
+    
+    # Default: Export using DCF template with Předmět ocenění sheet filled
     try:
         logger.info("Creating DCF template export")
         
@@ -532,6 +797,197 @@ async def process_pdf(
             headers={"Content-Disposition": "attachment; filename=valuagent_results.zip"},
     )
 
+
+@router.post("/process-stream")
+@limiter.limit("10/minute")
+async def process_pdf_stream(
+    request: Request,
+    pdfs: list[UploadFile] = File(...),
+    tolerance: int = Form(1),
+    ocr_retries: int = Form(None),
+    excel_template: UploadFile = File(None),
+    offset: int = Form(0),
+):
+    """Process PDFs with real-time progress updates via Server-Sent Events"""
+    if not is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Nejste přihlášeni.")
+
+    import json
+    import base64
+    import asyncio
+
+    # Read all files BEFORE creating the generator (UploadFile objects will be closed after this function scope)
+    logger.info(f"Reading {len(pdfs)} uploaded PDF files")
+    file_payloads: list[tuple[str, bytes]] = []
+    for i, f in enumerate(pdfs):
+        content = await f.read()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"Uploaded file '{f.filename}' is empty")
+        filename = f.filename or f"soubor_{i+1}.pdf"
+        file_payloads.append((filename, content))
+        logger.info(f"File {i+1}: {filename} ({len(content)/1024:.1f}KB)")
+
+    # Read template
+    if not excel_template or not excel_template.filename:
+        raise HTTPException(status_code=400, detail="Excel template is required")
+    
+    template_content = await excel_template.read()
+    if not template_content:
+        raise HTTPException(status_code=400, detail="Excel template is empty")
+    
+    template_filename = excel_template.filename
+    logger.info(f"Excel template read: {template_filename} ({len(template_content)/1024:.1f}KB)")
+
+    async def event_generator():
+        try:
+            # Helper to send SSE message
+            def send_event(message: str, event_type: str = "info"):
+                return f"data: {json.dumps({'message': message, 'type': event_type})}\n\n"
+
+            yield send_event(f"Načítám {len(file_payloads)} {'soubor' if len(file_payloads) == 1 else 'soubory' if len(file_payloads) < 5 else 'souborů'}...")
+
+            # Report loaded files
+            for filename, content in file_payloads:
+                yield send_event(f"✓ Načten: {filename} ({len(content)/1024:.1f} KB)")
+            
+            yield send_event(f"✓ Excel template načten: {template_filename}")
+            
+            # Determine max retries
+            max_retries = ocr_retries if ocr_retries is not None else config.get_ocr_max_retries()
+            if not isinstance(max_retries, int):
+                max_retries = config.get_ocr_max_retries()
+            max_retries = max(1, min(max_retries, 5))
+
+            # Process all files concurrently with real-time progress
+            yield send_event(f"🚀 Spouštím paralelní zpracování {len(file_payloads)} {'souboru' if len(file_payloads) == 1 else 'souborů'}...")
+            
+            # Create a queue for real-time progress messages
+            progress_queue = asyncio.Queue()
+            
+            async def process_single_file(original_name: str, pdf_bytes: bytes, file_idx: int):
+                """Process a single file and send progress events"""
+                try:
+                    # Disambiguate
+                    await progress_queue.put(("info", f"🔍 {original_name}: rozpoznávám typ výkazů..."))
+                    info = await disambiguate_pdf_bytes_async(pdf_bytes)
+                    
+                    present_types: list[str] = []
+                    if info.get("rozvaha"):
+                        present_types.append("rozvaha")
+                    if info.get("vzz"):
+                        present_types.append("vzz")
+                    
+                    if not present_types:
+                        await progress_queue.put(("error", f"⚠ {original_name}: žádný výkaz rozpoznán"))
+                        return []
+                    
+                    detected_names = [("Rozvaha" if t == "rozvaha" else "Výkaz zisku a ztráty") for t in present_types]
+                    statements_text = " a ".join(detected_names)
+                    await progress_queue.put(("info", f"📄 {original_name}: nalezeno {statements_text}"))
+                    
+                    # Process each statement type and report as soon as each completes
+                    async def process_statement(st_type: str):
+                        """Process a single statement type and report immediately"""
+                        st_name_full = "Rozvahu" if st_type == "rozvaha" else "Výkaz zisku a ztráty"
+                        st_name_short = "Rozvaha" if st_type == "rozvaha" else "VZZ"
+                        
+                        await progress_queue.put(("info", f"🤖 {original_name} - {st_name_full}: extrahuji pomocí AI..."))
+                        
+                        result_obj = await ocr_and_validate_with_retries(pdf_bytes, st_type, tolerance, max_retries)
+                        result_obj = dict(result_obj)
+                        result_obj["original"] = original_name
+                        result_obj["statement_type"] = st_type
+                        result_obj["disambiguation_info"] = info
+                        
+                        # Report completion immediately
+                        if result_obj.get("status") == "ok":
+                            model = result_obj.get("model")
+                            rok = getattr(model, "rok", "?")
+                            attempts = result_obj.get("ocr_attempts", 1)
+                            data_rows = len(getattr(model, "data", {}))
+                            await progress_queue.put(("success", f"✅ {original_name} - {st_name_short}: rok {rok}, {data_rows} řádků"))
+                        else:
+                            await progress_queue.put(("error", f"⚠ {original_name} - {st_name_short}: zpracováno s chybami"))
+                        
+                        return result_obj
+                    
+                    # Process all statement types concurrently and collect results
+                    statement_tasks = [process_statement(st_type) for st_type in present_types]
+                    results = await asyncio.gather(*statement_tasks)
+                    
+                    return list(results)
+                except Exception as e:
+                    await progress_queue.put(("error", f"❌ {original_name}: chyba - {str(e)}"))
+                    logger.error(f"Error processing {original_name}: {e}", exc_info=True)
+                    return []
+            
+            # Start all file processing tasks
+            file_tasks = [
+                asyncio.create_task(process_single_file(name, bytes_, idx + 1))
+                for idx, (name, bytes_) in enumerate(file_payloads)
+            ]
+            
+            # Monitor progress queue and yield events in real-time
+            all_results = []
+            completed_tasks = 0
+            total_tasks = len(file_tasks)
+            
+            while completed_tasks < total_tasks:
+                # Check for progress messages (non-blocking with timeout)
+                try:
+                    event_type, message = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                    yield send_event(message, event_type)
+                except asyncio.TimeoutError:
+                    pass
+                
+                # Check if any tasks completed
+                done_tasks = [t for t in file_tasks if t.done()]
+                if len(done_tasks) > completed_tasks:
+                    for task in done_tasks[completed_tasks:]:
+                        try:
+                            file_results = await task
+                            all_results.extend(file_results)
+                        except Exception as e:
+                            logger.error(f"Task failed: {e}", exc_info=True)
+                    completed_tasks = len(done_tasks)
+            
+            # Drain any remaining messages in the queue
+            while not progress_queue.empty():
+                try:
+                    event_type, message = progress_queue.get_nowait()
+                    yield send_event(message, event_type)
+                except asyncio.QueueEmpty:
+                    break
+            
+            if not all_results:
+                yield send_event("Žádné výkazy nebyly úspěšně zpracovány", "error")
+                return
+            
+            # Create Excel
+            yield send_event("📊 Vytvářím Excel soubor s vašimi daty...")
+            
+            balance_sheets = [r for r in all_results if r["statement_type"] == "rozvaha"]
+            if balance_sheets:
+                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+                year = getattr(latest_bs["model"], "rok", "")
+                filename = f"Data_valuagent_{year}.xlsx"
+            else:
+                filename = "Data_valuagent.xlsx"
+            
+            data_buffer = export_data_landing(all_results, template_content, tolerance=tolerance, offset=offset)
+            
+            # Convert buffer to base64 for transmission
+            excel_b64 = base64.b64encode(data_buffer.getvalue()).decode('utf-8')
+            
+            yield send_event("✅ Excel soubor je připraven ke stažení!", "success")
+            yield f"data: {json.dumps({'type': 'download', 'filename': filename, 'data': excel_b64})}\n\n"
+            yield send_event("🎉 Hotovo! Můžete zpracovat další výkazy.", "success")
+            
+        except Exception as e:
+            logger.error(f"Error in processing stream: {e}", exc_info=True)
+            yield send_event(f"Chyba při zpracování: {str(e)}", "error")
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Pretty login page (form-based)
