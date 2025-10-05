@@ -187,6 +187,11 @@ INDEX_HTML = """
                   </select>
                   <div class="hint">DCF template - klasický formát s Předmět ocenění. Data landing - vyplní data do vašeho Excel souboru.</div>
                 </label>
+                <label id="offset-label" style="display:none;">
+                  Offset (data landing)
+                  <input id="offset-input" type="number" name="offset" value="0" min="0" max="7" />
+                  <div class="hint">Kolik období (let) zleva přeskočit. 0 = bez přeskočení (standardní), 1 = začít vyplňovat od druhého sloupce, atd. Užitečné když nejnovější data ještě nejsou k dispozici.</div>
+                </label>
                 <label>
                   Tolerance
                   <input type="number" name="tolerance" value="1" min="0" placeholder="0 = přísné porovnání" />
@@ -296,19 +301,24 @@ INDEX_HTML = """
         });
         input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
 
-        // Show/hide template input based on export format
+        // Show/hide template input and offset based on export format
         const exportFormatSelect = document.getElementById('export-format-select');
         const templateLabel = document.getElementById('template-label');
         const templateInput = document.getElementById('template-input');
+        const offsetLabel = document.getElementById('offset-label');
+        const offsetInput = document.getElementById('offset-input');
         
         exportFormatSelect.addEventListener('change', () => {
           if (exportFormatSelect.value === 'data_landing') {
             templateLabel.style.display = 'grid';
             templateInput.required = true;
+            offsetLabel.style.display = 'grid';
           } else {
             templateLabel.style.display = 'none';
             templateInput.required = false;
             templateInput.value = '';
+            offsetLabel.style.display = 'none';
+            offsetInput.value = '0';
           }
         });
 
@@ -412,6 +422,7 @@ async def process_pdf(
     ocr_retries: int = Form(None),
     export_format: str = Form("dcf"),  # "dcf" or "data_landing"
     excel_template: UploadFile = File(None),  # Optional Excel template for data_landing format
+    offset: int = Form(0),  # Number of years to skip from the left (data_landing only)
 ):
     if not is_authenticated(request):
         return JSONResponse({"detail": "Nejste přihlášeni."}, status_code=401)
@@ -534,7 +545,7 @@ async def process_pdf(
             else:
                 filename = "Data_valuagent.xlsx"
             
-            data_buffer = export_data_landing(results, template_content, tolerance=tolerance)
+            data_buffer = export_data_landing(results, template_content, tolerance=tolerance, offset=offset)
             
             logger.info(f"Generated data landing export: {filename}")
             return StreamingResponse(

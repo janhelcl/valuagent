@@ -103,8 +103,15 @@ def get_data_start_column() -> int:
     return 5  # Column E (after column D)
 
 
-def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[Dict[str, Any]]) -> None:
-    """Fill numerical data and dates into existing Data - Rozvaha sheet."""
+def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[Dict[str, Any]], offset: int = 0) -> None:
+    """Fill numerical data and dates into existing Data - Rozvaha sheet.
+    
+    Args:
+        workbook: Excel workbook to fill
+        balance_sheet_results: List of balance sheet results sorted by year
+        offset: Number of years to skip from the left (default 0)
+                Each year uses 3 columns (Brutto, Korekce, Netto)
+    """
     sheet_name = "Data - Rozvaha"
     
     if sheet_name not in workbook.sheetnames:
@@ -122,9 +129,12 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     
     # Fixed columns: D for row numbers, E for data start
     row_num_col = get_row_number_column()  # Column D
-    data_start_col = get_data_start_column()  # Column E
+    base_data_col = get_data_start_column()  # Column E
     
-    logger.info(f"Filling {sheet_name} with {len(balance_sheet_results)} years starting at column {data_start_col} (row numbers in column {row_num_col})")
+    # Apply offset: each year in Rozvaha uses 3 columns (Brutto, Korekce, Netto)
+    data_start_col = base_data_col + (offset * 3)
+    
+    logger.info(f"Filling {sheet_name} with {len(balance_sheet_results)} years starting at column {data_start_col} (offset={offset}, row numbers in column {row_num_col})")
     
     # Fill dates in row 1 (dd.mm.yyyy format)
     col_index = data_start_col
@@ -250,8 +260,15 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
 
 
-def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List[Dict[str, Any]]) -> None:
-    """Fill numerical data and dates into existing Data - Výsledovka sheet."""
+def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List[Dict[str, Any]], offset: int = 0) -> None:
+    """Fill numerical data and dates into existing Data - Výsledovka sheet.
+    
+    Args:
+        workbook: Excel workbook to fill
+        profit_loss_results: List of P&L results sorted by year
+        offset: Number of years to skip from the left (default 0)
+                Each year uses 1 column
+    """
     sheet_name = "Data - Výsledovka"
     
     if sheet_name not in workbook.sheetnames:
@@ -269,9 +286,12 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     
     # Fixed columns: D for row numbers, E for data start
     row_num_col = get_row_number_column()  # Column D
-    data_start_col = get_data_start_column()  # Column E
+    base_data_col = get_data_start_column()  # Column E
     
-    logger.info(f"Filling {sheet_name} with {len(profit_loss_results)} years starting at column {data_start_col} (row numbers in column {row_num_col})")
+    # Apply offset: each year in Výsledovka uses 1 column
+    data_start_col = base_data_col + offset
+    
+    logger.info(f"Filling {sheet_name} with {len(profit_loss_results)} years starting at column {data_start_col} (offset={offset}, row numbers in column {row_num_col})")
     
     # Fill dates in row 1 (dd.mm.yyyy format)
     col_index = data_start_col
@@ -440,7 +460,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
     logger.info(f"Successfully created {sheet_name} sheet")
 
 
-def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, tolerance: int = 1) -> io.BytesIO:
+def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, tolerance: int = 1, offset: int = 0) -> io.BytesIO:
     """
     Fill financial data into user-provided Excel template.
     
@@ -448,11 +468,13 @@ def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, to
         results: Processed financial statement results
         template_bytes: User's Excel template file as bytes
         tolerance: Validation tolerance
+        offset: Number of years to skip from the left (default 0)
+                Useful when newest data isn't available yet
     
     Returns:
         BytesIO buffer with filled Excel file
     """
-    logger.info(f"Filling data landing template with {len(results)} results")
+    logger.info(f"Filling data landing template with {len(results)} results (offset={offset})")
     
     # Load the user's template
     template_buffer = io.BytesIO(template_bytes)
@@ -463,7 +485,7 @@ def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, to
     sorted_balance_sheets = get_sorted_balance_sheets(results)
     
     if sorted_balance_sheets:
-        fill_rozvaha_sheet(workbook, sorted_balance_sheets)
+        fill_rozvaha_sheet(workbook, sorted_balance_sheets, offset=offset)
     else:
         logger.warning("No balance sheet data found in results")
     
@@ -471,7 +493,7 @@ def export_data_landing(results: List[Dict[str, Any]], template_bytes: bytes, to
     sorted_profit_loss = get_sorted_profit_loss_statements(results)
     
     if sorted_profit_loss:
-        fill_vysledovka_sheet(workbook, sorted_profit_loss)
+        fill_vysledovka_sheet(workbook, sorted_profit_loss, offset=offset)
     else:
         logger.warning("No P&L data found in results")
     
