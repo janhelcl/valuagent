@@ -87,9 +87,10 @@ INDEX_HTML = """
       @media (max-width: 920px) {
         .card { grid-template-columns: 1fr; }
       }
+      .card > div:first-child { display: flex; flex-direction: column; }
       .section-title { font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
 
-      form { display: grid; gap: 14px; }
+      form { display: grid; gap: 14px; flex: 1; }
       label { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
       input[type="number"], select {
         border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 16px;
@@ -117,16 +118,19 @@ INDEX_HTML = """
       details.settings summary { cursor: pointer; font-weight: 600; color: var(--text); list-style: none; }
       details.settings summary::-webkit-details-marker { display: none; }
       .settings-body { margin-top: 8px; display: grid; gap: 10px; }
-      .notice { margin-top: 6px; font-size: 14px; display: none; }
+      .notice { margin-top: 6px; margin-bottom: 8px; font-size: 14px; display: none; }
       .notice--error { color: #b91c1c; display: block; }
       .notice--success { color: #166534; display: block; }
 
-      .actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-      button[type="submit"] {
-        background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-size: 16px; font-weight: 600; cursor: pointer;
+      button[type="submit"], .reset-btn {
+        background: var(--primary); color: #fff; border: 0; border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer;
         box-shadow: 0 8px 20px rgba(43, 110, 246, .35);
+        transition: all 0.15s ease;
+        display: flex; align-items: center; gap: 8px; justify-content: center;
+        margin-top: auto;
       }
-      button[type="submit"]:hover { background: var(--primary-600); }
+      button[type="submit"]:hover, .reset-btn:hover { background: var(--primary-600); }
+      button[type="submit"]:active, .reset-btn:active { transform: scale(0.98); }
       button[disabled] { opacity: .7; cursor: not-allowed; box-shadow: none; }
 
       /* Segmented switch */
@@ -136,7 +140,7 @@ INDEX_HTML = """
       .segmented button.is-active { background: var(--primary); color: #fff; }
       .segmented button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff, 0 0 0 4px var(--ring); position: relative; z-index: 1; }
 
-      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; display: flex; flex-direction: column; max-height: 600px; }
+      .aside { border-left: 1px solid #eef2f7; padding-left: 24px; display: flex; flex-direction: column; }
       @media (max-width: 920px) { .aside { border: 0; padding: 0; } }
       .list { margin: 0; padding-left: 18px; color: #222; }
       .list li { margin: 6px 0; color: #334155; }
@@ -212,11 +216,11 @@ INDEX_HTML = """
               </div>
             </details>
 
-            <div class="actions">
-              <button id="submit-btn" type="submit">Zpracovat a stáhnout Excel</button>
-              <span class="hint">Po úspěšném zpracování se stáhne soubor .xlsx.</span>
-            </div>
             <div id="notice" class="notice" aria-live="polite"></div>
+            <button id="submit-btn" type="submit">
+              <span>📊</span>
+              <span>Zpracovat a stáhnout Excel</span>
+            </button>
           </form>
         </div>
         <aside class="aside">
@@ -229,6 +233,10 @@ INDEX_HTML = """
               </div>
             </div>
           </div>
+          <button id="reset-btn" class="reset-btn" type="button">
+            <span>🔄</span>
+            <span>Resetovat vše</span>
+          </button>
         </aside>
       </div>
 
@@ -530,6 +538,32 @@ INDEX_HTML = """
           }
           return new Blob([new Uint8Array(byteArrays)], { type: mimeType });
         }
+        
+        // Reset button functionality
+        const resetBtn = document.getElementById('reset-btn');
+        resetBtn.addEventListener('click', () => {
+          // Clear selected files
+          selectedFiles = [];
+          renderList();
+          
+          // Clear selected template
+          selectedTemplate = null;
+          renderTemplateList();
+          
+          // Reset form
+          form.reset();
+          
+          // Clear and reset chat log
+          clearChatLog();
+          addChatMessage('Ahoj! Jsem připraven zpracovat vaše účetní výkazy. Nahrajte PDF soubory a Excel template a klikněte na tlačítko Zpracovat.', 'system');
+          
+          // Clear notice
+          setNotice('', '');
+          
+          // Re-enable submit button if it was disabled
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>📊</span><span>Zpracovat a stáhnout Excel</span>';
+        });
       })();
     </script>
   </body>
