@@ -2,9 +2,10 @@ statement_disambiguation_instructions = """
 Přečti přiložené PDF. 
 
 Identifikuj, zda obsahuje Rozvahu a Výkaz zisku a ztráty. Může obsahovat obojí.
-Dále identifikuj datum ke kterému jsou výkazy vydány.
+Dále identifikuj datum ke kterému je zpracována účetní závěrka.
 
-POZOR: nepleť si datum ke kterému jsou výkazy vydány s datumem kdy jsou zveřejněny. Tyto pojmy jsou odlišné.
+POZOR: Soubor může obsahovat celou řadu datumů. Nás zajíma datum ke kterému je zpracována účetní závěrka, to znamená poslední den daného účetního období. Typicky se uvádí v hlavičce každého z výkazů.
+Neplést si s ostatními datumy v souboru, jako je například datum kdy jsou výkazy zveřejněny.
 
 Vracíš pouze json, nic jiného.
 Formát:
