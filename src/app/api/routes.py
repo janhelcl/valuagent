@@ -159,7 +159,7 @@ INDEX_HTML = """
           <p class="section-title">Nahrát</p>
           <form id="upload-form" action="/process" method="post" enctype="multipart/form-data" autocomplete="off">
             <label>
-              Soubory (PDF)
+              Vstupní soubory obsahující výkazy (PDF)
               <input id="file-input" type="file" name="pdfs" accept="application/pdf" multiple style="display:none" />
               <div id="dropzone" class="dropzone">
                 <strong>Přetáhněte sem PDF soubory</strong>
@@ -170,25 +170,24 @@ INDEX_HTML = """
             </label>
             <div class="hint">Typ výkazu bude rozpoznán automaticky (Rozvaha a/nebo VZZ) pro každý PDF soubor.</div>
             
-            <label id="template-label" style="display:none;">
-              Excel Template (pro Data landing formát)
-              <input id="template-input" type="file" name="excel_template" accept=".xlsx,.xls" />
-              <div class="hint">Nahrajte Excel soubor s připravenými listy "Data - Rozvaha" a "Data - Report Kvality"</div>
+            <label>
+              Excel pro výstup
+              <input id="template-input" type="file" name="excel_template" accept=".xlsx,.xls" style="display:none" />
+              <div id="template-dropzone" class="dropzone">
+                <strong>Přetáhněte sem Excel soubor</strong>
+                <div class="hint">nebo klikněte pro výběr</div>
+                <div id="template-file-name" class="hint"></div>
+              </div>
+              <ul id="template-file-list" class="file-list" aria-live="polite"></ul>
             </label>
+            <div class="hint">Nahrajte Excel soubor s připravenými listy "Data - Rozvaha", "Data - Výsledovka" a "Data - Report Kvality"</div>
 
             <details class="settings">
               <summary>Nastavení</summary>
               <div class="settings-body">
+                <input type="hidden" name="export_format" value="data_landing" />
                 <label>
-                  Formát exportu
-                  <select id="export-format-select" name="export_format">
-                    <option value="dcf">DCF template (výchozí)</option>
-                    <option value="data_landing">Data landing (vyžaduje Excel template)</option>
-                  </select>
-                  <div class="hint">DCF template - klasický formát s Předmět ocenění. Data landing - vyplní data do vašeho Excel souboru.</div>
-                </label>
-                <label id="offset-label" style="display:none;">
-                  Offset (data landing)
+                  Offset
                   <input id="offset-input" type="number" name="offset" value="0" min="0" max="7" />
                   <div class="hint">Kolik období (let) zleva přeskočit. 0 = bez přeskočení (standardní), 1 = začít vyplňovat od druhého sloupce, atd. Užitečné když nejnovější data ještě nejsou k dispozici.</div>
                 </label>
@@ -301,27 +300,71 @@ INDEX_HTML = """
         });
         input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
 
-        // Show/hide template input and offset based on export format
-        const exportFormatSelect = document.getElementById('export-format-select');
-        const templateLabel = document.getElementById('template-label');
+        // Excel template handling (single file only)
+        const templateDrop = document.getElementById('template-dropzone');
         const templateInput = document.getElementById('template-input');
-        const offsetLabel = document.getElementById('offset-label');
-        const offsetInput = document.getElementById('offset-input');
+        const templateFileName = document.getElementById('template-file-name');
+        const templateListEl = document.getElementById('template-file-list');
+        let selectedTemplate = null;
+
+        const renderTemplateList = () => {
+          if (!selectedTemplate) {
+            templateFileName.textContent = '';
+            templateListEl.innerHTML = '';
+            return;
+          }
+          templateFileName.textContent = '1 soubor';
+          templateListEl.innerHTML = '';
+          const li = document.createElement('li');
+          li.className = 'file-item';
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = selectedTemplate.name;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'remove-btn';
+          btn.setAttribute('aria-label', `Odebrat ${selectedTemplate.name}`);
+          btn.textContent = '×';
+          btn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectedTemplate = null;
+            renderTemplateList();
+          });
+          li.appendChild(nameSpan);
+          li.appendChild(btn);
+          templateListEl.appendChild(li);
+        };
+
+        const isExcel = (f) => {
+          const name = f.name.toLowerCase();
+          return name.endsWith('.xlsx') || name.endsWith('.xls') || 
+                 f.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                 f.type === 'application/vnd.ms-excel';
+        };
         
-        exportFormatSelect.addEventListener('change', () => {
-          if (exportFormatSelect.value === 'data_landing') {
-            templateLabel.style.display = 'grid';
-            templateInput.required = true;
-            offsetLabel.style.display = 'grid';
-          } else {
-            templateLabel.style.display = 'none';
-            templateInput.required = false;
-            templateInput.value = '';
-            offsetLabel.style.display = 'none';
-            offsetInput.value = '0';
+        const setTemplate = (fileList) => {
+          const incoming = Array.from(fileList || []);
+          if (incoming.length === 0) return;
+          if (incoming.length > 1) { alert('Nahrajte prosím pouze jeden Excel soubor.'); return; }
+          if (!isExcel(incoming[0])) { alert('Nahrajte prosím Excel soubor (.xlsx nebo .xls).'); return; }
+          selectedTemplate = incoming[0];
+          renderTemplateList();
+        };
+
+        templateDrop.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); templateInput.value = ''; templateInput.click(); });
+        templateDrop.addEventListener('dragover', (e) => { e.preventDefault(); templateDrop.classList.add('is-dragover'); });
+        templateDrop.addEventListener('dragleave', () => templateDrop.classList.remove('is-dragover'));
+        templateDrop.addEventListener('drop', (e) => {
+          e.preventDefault();
+          templateDrop.classList.remove('is-dragover');
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setTemplate(e.dataTransfer.files);
           }
         });
+        templateInput.addEventListener('change', () => { setTemplate(templateInput.files); templateInput.value = ''; });
 
+        // Form submission
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           setNotice('', '');
@@ -330,9 +373,9 @@ INDEX_HTML = """
             return;
           }
           
-          // Check if template is required and provided
-          if (exportFormatSelect.value === 'data_landing' && !templateInput.files.length) {
-            setNotice('Pro Data landing formát je vyžadován Excel template.', 'error');
+          // Check if template is provided
+          if (!selectedTemplate) {
+            setNotice('Nahrajte prosím Excel template.', 'error');
             return;
           }
           
@@ -341,10 +384,13 @@ INDEX_HTML = """
           submitBtn.textContent = 'Zpracovávám…';
           try {
             const formData = new FormData(form);
-            // Always rebuild files from selectedFiles to ensure added/removed items are respected
+            // Rebuild PDF files from selectedFiles
             formData.delete('pdfs');
             const filesToSend = selectedFiles.slice();
             for (const f of filesToSend) formData.append('pdfs', f, f.name);
+            // Add template
+            formData.delete('excel_template');
+            if (selectedTemplate) formData.append('excel_template', selectedTemplate, selectedTemplate.name);
             const response = await fetch('/process', { method: 'POST', body: formData });
             const contentType = response.headers.get('content-type') || '';
             if (!response.ok) {
@@ -420,8 +466,8 @@ async def process_pdf(
     tolerance: int = Form(1),
     return_json: bool = Form(False),
     ocr_retries: int = Form(None),
-    export_format: str = Form("dcf"),  # "dcf" or "data_landing"
-    excel_template: UploadFile = File(None),  # Optional Excel template for data_landing format
+    export_format: str = Form("data_landing"),  # Always use data_landing format
+    excel_template: UploadFile = File(None),  # Required Excel template for data_landing format
     offset: int = Form(0),  # Number of years to skip from the left (data_landing only)
 ):
     if not is_authenticated(request):
