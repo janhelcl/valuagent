@@ -30,6 +30,85 @@ from openpyxl.utils import get_column_letter
 logger = logging.getLogger(__name__)
 
 
+def get_datum_for_sorting(result: Dict[str, Any]) -> str:
+    """Get datum from disambiguation info for sorting (YYYY-MM-DD format).
+    
+    Args:
+        result: Result dict containing disambiguation_info with datum field
+        
+    Returns:
+        Date string in YYYY-MM-DD format, or empty string if not available
+        Empty string sorts before any valid date
+    """
+    disambiguation_info = result.get("disambiguation_info", {})
+    if not disambiguation_info:
+        return ""
+    
+    datum = disambiguation_info.get("datum")
+    if not datum:
+        return ""
+    
+    # Validate the date format
+    try:
+        datetime.strptime(datum, "%Y-%m-%d")
+        return datum
+    except ValueError as e:
+        logger.warning(f"Could not parse datum '{datum}': {e}")
+        return ""
+
+
+def extract_year_from_datum(result: Dict[str, Any]) -> int:
+    """Extract year from disambiguation datum field.
+    
+    Args:
+        result: Result dict containing disambiguation_info with datum field
+        
+    Returns:
+        Year as integer, or 0 if not available
+    """
+    datum = get_datum_for_sorting(result)
+    if not datum:
+        return 0
+    
+    try:
+        date_obj = datetime.strptime(datum, "%Y-%m-%d")
+        return date_obj.year
+    except ValueError:
+        return 0
+
+
+def format_datum_for_excel(result: Dict[str, Any]) -> str:
+    """Format the datum from disambiguation info for Excel display (dd.mm.yyyy).
+    
+    Args:
+        result: Result dict containing disambiguation_info with datum field
+        
+    Returns:
+        Formatted date string (dd.mm.yyyy) or empty string if not available
+    """
+    disambiguation_info = result.get("disambiguation_info", {})
+    if not disambiguation_info:
+        file_name = result.get("original", "unknown")
+        logger.warning(f"No disambiguation_info found in result for {file_name}")
+        return ""
+    
+    datum = disambiguation_info.get("datum")
+    if not datum:
+        file_name = result.get("original", "unknown")
+        logger.warning(f"No datum found in disambiguation_info for {file_name}")
+        return ""
+    
+    try:
+        # Parse YYYY-MM-DD format and convert to dd.mm.yyyy
+        date_obj = datetime.strptime(datum, "%Y-%m-%d")
+        formatted = date_obj.strftime("%d.%m.%Y")
+        logger.debug(f"Formatted datum '{datum}' to '{formatted}' for {result.get('original', 'unknown')}")
+        return formatted
+    except ValueError as e:
+        logger.warning(f"Could not parse datum '{datum}': {e}")
+        return ""
+
+
 def load_balance_sheet_structure() -> Dict[int, Dict[str, Any]]:
     """Load the balance sheet structure with row labels and descriptions."""
     resources_dir = Path(__file__).resolve().parent.parent / "resources"
@@ -62,33 +141,39 @@ def load_balance_sheet_structure() -> Dict[int, Dict[str, Any]]:
 
 
 def get_sorted_balance_sheets(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Get all balance sheets sorted by year (newest first)."""
+    """Get all balance sheets sorted by date (newest first)."""
     balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
     
     if not balance_sheets:
         return []
     
-    # Sort by year (rok) in descending order (newest first)
-    balance_sheets.sort(key=lambda x: getattr(x["model"], "rok", 0), reverse=True)
+    # Log each balance sheet before sorting
+    for i, bs in enumerate(balance_sheets):
+        file_name = bs.get("original", "unknown")
+        datum_raw = bs.get("disambiguation_info", {}).get("datum", "N/A")
+        logger.info(f"Balance sheet {i+1}: {file_name} - raw datum={datum_raw}")
     
-    years = [getattr(bs["model"], "rok", "unknown") for bs in balance_sheets]
-    logger.info(f"Found {len(balance_sheets)} balance sheets for years: {years}")
+    # Sort by full date from disambiguation datum (newest first)
+    balance_sheets.sort(key=lambda x: get_datum_for_sorting(x), reverse=True)
+    
+    dates = [format_datum_for_excel(bs) or get_datum_for_sorting(bs) for bs in balance_sheets]
+    logger.info(f"Found {len(balance_sheets)} balance sheets for dates: {dates}")
     
     return balance_sheets
 
 
 def get_sorted_profit_loss_statements(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Get all P&L statements sorted by year (newest first)."""
+    """Get all P&L statements sorted by date (newest first)."""
     profit_loss = [r for r in results if r["statement_type"] == "vzz"]
     
     if not profit_loss:
         return []
     
-    # Sort by year (rok) in descending order (newest first)
-    profit_loss.sort(key=lambda x: getattr(x["model"], "rok", 0), reverse=True)
+    # Sort by full date from disambiguation datum (newest first)
+    profit_loss.sort(key=lambda x: get_datum_for_sorting(x), reverse=True)
     
-    years = [getattr(pl["model"], "rok", "unknown") for pl in profit_loss]
-    logger.info(f"Found {len(profit_loss)} P&L statements for years: {years}")
+    dates = [format_datum_for_excel(pl) or get_datum_for_sorting(pl) for pl in profit_loss]
+    logger.info(f"Found {len(profit_loss)} P&L statements for dates: {dates}")
     
     return profit_loss
 
@@ -136,32 +221,33 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
     
     logger.info(f"Filling {sheet_name} with {len(balance_sheet_results)} years starting at column {data_start_col} (offset={offset}, row numbers in column {row_num_col})")
     
-    # Fill dates in row 1 (dd.mm.yyyy format)
+    # Fill dates in row 1 (dd.mm.yyyy format from disambiguation datum)
     col_index = data_start_col
-    year_to_columns = {}  # Map year to list of column indices
+    result_to_columns = {}  # Map result to list of column indices
     
     for bs_result in balance_sheet_results:
-        model = bs_result.get("model")
-        year = getattr(model, "rok", "")
+        # Get date from disambiguation info
+        date_str = format_datum_for_excel(bs_result)
+        file_name = bs_result.get("original", "unknown")
         
-        if not year:
+        if not date_str:
+            logger.warning(f"No date available for balance sheet from {file_name}, skipping")
             continue
         
-        # Create date string in dd.mm.yyyy format (31.12.YYYY)
-        date_str = f"31.12.{year}"
+        logger.info(f"Filling Rozvaha from {file_name} with date {date_str}")
         
-        # Store column positions for this year
-        year_columns = []
+        # Store column positions for this result
+        result_columns = []
         
         # AKTIVA section: 3 columns per year (Brutto, Korekce, Netto)
         # Fill the same date for all 3 columns
         for i in range(3):
             sheet.cell(row=1, column=col_index, value=date_str)
-            year_columns.append(col_index)
+            result_columns.append(col_index)
             col_index += 1
         
-        year_to_columns[year] = year_columns
-        logger.debug(f"Set dates for year {year} in columns {year_columns}")
+        result_to_columns[id(bs_result)] = result_columns
+        logger.debug(f"Set dates for {date_str} in columns {result_columns}")
     
     # Create a mapping of row_number -> sheet_row for efficient lookup
     # Scan the row number column to find where each row ID is located
@@ -178,31 +264,29 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                 pass
     
     logger.info(f"Found {len(row_id_to_sheet_row)} row mappings in template: {list(row_id_to_sheet_row.keys())[:10]}...")
-    logger.info(f"Year to columns mapping: {year_to_columns}")
+    logger.info(f"Result to columns mapping: {len(result_to_columns)} results")
     
-    # Fill data for each year
+    # Fill data for each balance sheet result
     total_filled = 0
-    for year, columns in year_to_columns.items():
-        bs_result = None
-        for result in balance_sheet_results:
-            if getattr(result.get("model"), "rok", None) == year:
-                bs_result = result
-                break
-        
-        if not bs_result:
-            logger.warning(f"No balance sheet result found for year {year}")
+    for bs_result in balance_sheet_results:
+        result_id = id(bs_result)
+        if result_id not in result_to_columns:
+            logger.warning(f"No columns allocated for result, skipping")
             continue
+        
+        columns = result_to_columns[result_id]
+        date_str = format_datum_for_excel(bs_result)
         
         model = bs_result.get("model")
         if not model:
-            logger.warning(f"No model found for year {year}")
+            logger.warning(f"No model found for result with date {date_str}")
             continue
         
-        logger.info(f"Processing year {year} with {len(model.data)} rows")
+        logger.info(f"Processing {date_str} with {len(model.data)} rows")
         
         # columns = [brutto_col, korekce_col, netto_col]
         brutto_col, korekce_col, netto_col = columns
-        logger.info(f"Using columns for year {year}: Brutto={brutto_col}, Korekce={korekce_col}, Netto={netto_col}")
+        logger.info(f"Using columns for {date_str}: Brutto={brutto_col}, Korekce={korekce_col}, Netto={netto_col}")
         
         filled_count = 0
         skipped_count = 0
@@ -254,7 +338,7 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
                     logger.debug(f"  Filled PASIVA row {row_id} Netto at ({excel_row}, {netto_col}): {netto_val}")
                 filled_count += 1
         
-        logger.info(f"Year {year}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
+        logger.info(f"{date_str}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
         total_filled += filled_count
     
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
@@ -293,24 +377,25 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     
     logger.info(f"Filling {sheet_name} with {len(profit_loss_results)} years starting at column {data_start_col} (offset={offset}, row numbers in column {row_num_col})")
     
-    # Fill dates in row 1 (dd.mm.yyyy format)
+    # Fill dates in row 1 (dd.mm.yyyy format from disambiguation datum)
     col_index = data_start_col
-    year_to_column = {}  # Map year to column index (P&L has 1 column per year)
+    result_to_column = {}  # Map result to column index (P&L has 1 column per year)
     
     for pl_result in profit_loss_results:
-        model = pl_result.get("model")
-        year = getattr(model, "rok", "")
+        # Get date from disambiguation info
+        date_str = format_datum_for_excel(pl_result)
+        file_name = pl_result.get("original", "unknown")
         
-        if not year:
+        if not date_str:
+            logger.warning(f"No date available for P&L from {file_name}, skipping")
             continue
         
-        # Create date string in dd.mm.yyyy format (31.12.YYYY)
-        date_str = f"31.12.{year}"
+        logger.info(f"Filling Výsledovka from {file_name} with date {date_str}")
         
         # P&L: just 1 column per year (not 3 like balance sheet)
         sheet.cell(row=1, column=col_index, value=date_str)
-        year_to_column[year] = col_index
-        logger.debug(f"Set date for year {year} in column {col_index}")
+        result_to_column[id(pl_result)] = col_index
+        logger.debug(f"Set date for {date_str} in column {col_index}")
         
         col_index += 1
     
@@ -330,28 +415,26 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
                 pass
     
     logger.info(f"Found {len(row_id_to_sheet_row)} row mappings in template: {list(row_id_to_sheet_row.keys())[:10]}...")
-    logger.info(f"Year to column mapping: {year_to_column}")
+    logger.info(f"Result to column mapping: {len(result_to_column)} results")
     
-    # Fill data for each year
+    # Fill data for each P&L result
     total_filled = 0
-    for year, column in year_to_column.items():
-        pl_result = None
-        for result in profit_loss_results:
-            if getattr(result.get("model"), "rok", None) == year:
-                pl_result = result
-                break
-        
-        if not pl_result:
-            logger.warning(f"No P&L result found for year {year}")
+    for pl_result in profit_loss_results:
+        result_id = id(pl_result)
+        if result_id not in result_to_column:
+            logger.warning(f"No column allocated for result, skipping")
             continue
+        
+        column = result_to_column[result_id]
+        date_str = format_datum_for_excel(pl_result)
         
         model = pl_result.get("model")
         if not model:
-            logger.warning(f"No model found for year {year}")
+            logger.warning(f"No model found for result with date {date_str}")
             continue
         
-        logger.info(f"Processing year {year} with {len(model.data)} rows")
-        logger.info(f"Using column {column} for year {year}")
+        logger.info(f"Processing {date_str} with {len(model.data)} rows")
+        logger.info(f"Using column {column} for {date_str}")
         
         filled_count = 0
         skipped_count = 0
@@ -372,7 +455,7 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
                 logger.debug(f"  Filled row {row_id} at ({excel_row}, {column}): {value}")
                 filled_count += 1
         
-        logger.info(f"Year {year}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
+        logger.info(f"{date_str}: Filled {filled_count} rows, Skipped {skipped_count} rows (not in template)")
         total_filled += filled_count
     
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
@@ -399,7 +482,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
     sheet["A2"] = f"Tolerance: {tolerance}"
     
     # Overview table
-    headers = ["Soubor", "Výkaz", "Rok", "Pokusy OCR", "Status", "Počet problémů"]
+    headers = ["Soubor", "Výkaz", "Datum", "Pokusy OCR", "Status", "Počet problémů"]
     for col, h in enumerate(headers, start=1):
         cell = sheet.cell(row=4, column=col, value=h)
         cell.font = Font(bold=True)
@@ -408,12 +491,18 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
     for r in results:
         file_name = r.get("original")
         st = r.get("statement_type")
-        model = r.get("model")
-        rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+        # Get date from disambiguation info, or fallback to rok from model
+        date_str = format_datum_for_excel(r)
+        if not date_str:
+            model = r.get("model")
+            rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+            date_display = rok if rok else "N/A"
+        else:
+            date_display = date_str
         attempts = r.get("ocr_attempts", 1)
         status = r.get("status", "ok")
         err_count = len(r.get("validation_errors") or [])
-        values = [file_name, st, rok, attempts, "OK" if status == "ok" else "Chyby", err_count]
+        values = [file_name, st, date_display, attempts, "OK" if status == "ok" else "Chyby", err_count]
         for col, v in enumerate(values, start=1):
             sheet.cell(row=row, column=col, value=v)
         row += 1
@@ -431,11 +520,17 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         found_errors = True
         file_name = r.get("original")
         st = r.get("statement_type")
-        model = r.get("model")
-        rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+        # Get date from disambiguation info, or fallback to rok from model
+        date_str = format_datum_for_excel(r)
+        if not date_str:
+            model = r.get("model")
+            rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+            date_display = rok if rok else "N/A"
+        else:
+            date_display = date_str
         sheet.cell(row=row, column=1, value=f"Soubor: {file_name}")
         sheet.cell(row=row, column=2, value=f"Výkaz: {st}")
-        sheet.cell(row=row, column=3, value=f"Rok: {rok}")
+        sheet.cell(row=row, column=3, value=f"Datum: {date_display}")
         row += 1
         for msg in errs:
             sheet.cell(row=row, column=2, value=msg)

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 from src.infrastructure.exporters.excel import export_excel
 from src.infrastructure.exporters.dcf import export_dcf_template
-from src.infrastructure.exporters.data_landing import export_data_landing
+from src.infrastructure.exporters.data_landing import export_data_landing, extract_year_from_datum, get_datum_for_sorting
 from src.services.process import process_pdf_bytes, disambiguate_pdf_bytes, process_pdf_bytes_async, disambiguate_pdf_bytes_async, ocr_and_validate_with_retries
 from src.infrastructure import config
 
@@ -654,6 +654,7 @@ async def process_pdf(
             result_obj["disambiguation_info"] = info
             file_results.append(result_obj)
             logger.debug(f"Completed {st_type} for {original_name} with status {result_obj.get('status')}")
+            logger.debug(f"Attached disambiguation_info to {st_type}: datum={info.get('datum', 'N/A')}")
         
         logger.info(f"Finished processing file: {original_name} ({len(file_results)} results)")
         return file_results
@@ -669,6 +670,14 @@ async def process_pdf(
         results.extend(file_results)
     
     logger.info(f"All processing completed. Total results: {len(results)}")
+    
+    # Log disambiguation info for each result
+    for r in results:
+        file_name = r.get("original", "unknown")
+        st_type = r.get("statement_type", "unknown")
+        disamb_info = r.get("disambiguation_info", {})
+        datum = disamb_info.get("datum", "N/A")
+        logger.info(f"Result check: {file_name} - {st_type} - datum={datum}")
 
     if return_json:
         # Return compact JSON summary
@@ -705,12 +714,12 @@ async def process_pdf(
             
             logger.info(f"Read Excel template: {len(template_content)/1024:.1f}KB")
             
-            # Get year for filename
+            # Get year for filename from disambiguation datum (sort by full date, extract year for filename)
             balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
             if balance_sheets:
-                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
-                year = getattr(latest_bs["model"], "rok", "")
-                filename = f"Data_valuagent_{year}.xlsx"
+                latest_bs = max(balance_sheets, key=lambda x: get_datum_for_sorting(x))
+                year = extract_year_from_datum(latest_bs)
+                filename = f"Data_valuagent_{year}.xlsx" if year else "Data_valuagent.xlsx"
             else:
                 filename = "Data_valuagent.xlsx"
             
@@ -735,14 +744,14 @@ async def process_pdf(
     try:
         logger.info("Creating DCF template export")
         
-        # Get disambiguation info from the latest balance sheet result
+        # Get disambiguation info from the latest balance sheet result (sort by full date, extract year for filename)
         balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
         disambiguation_info = None
         if balance_sheets:
-            latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
+            latest_bs = max(balance_sheets, key=lambda x: get_datum_for_sorting(x))
             disambiguation_info = latest_bs.get("disambiguation_info")
-            year = getattr(latest_bs["model"], "rok", "")
-            filename = f"DCF_valuagent_{year}.xlsx"
+            year = extract_year_from_datum(latest_bs)
+            filename = f"DCF_valuagent_{year}.xlsx" if year else "DCF_valuagent.xlsx"
         else:
             filename = "DCF_valuagent.xlsx"
         
@@ -881,9 +890,23 @@ async def process_pdf_stream(
                         await progress_queue.put(("error", f"⚠ {original_name}: žádný výkaz rozpoznán"))
                         return []
                     
+                    # Get the date from disambiguation
+                    datum = info.get("datum", "")
+                    date_display = ""
+                    if datum:
+                        try:
+                            from datetime import datetime
+                            date_obj = datetime.strptime(datum, "%Y-%m-%d")
+                            date_display = date_obj.strftime("%d.%m.%Y")
+                        except ValueError:
+                            date_display = datum
+                    
                     detected_names = [("Rozvaha" if t == "rozvaha" else "Výkaz zisku a ztráty") for t in present_types]
                     statements_text = " a ".join(detected_names)
-                    await progress_queue.put(("info", f"📄 {original_name}: nalezeno {statements_text}"))
+                    if date_display:
+                        await progress_queue.put(("info", f"📄 {original_name}: nalezeno {statements_text} k {date_display}"))
+                    else:
+                        await progress_queue.put(("info", f"📄 {original_name}: nalezeno {statements_text}"))
                     
                     # Process each statement type and report as soon as each completes
                     async def process_statement(st_type: str):
@@ -902,10 +925,13 @@ async def process_pdf_stream(
                         # Report completion immediately
                         if result_obj.get("status") == "ok":
                             model = result_obj.get("model")
-                            rok = getattr(model, "rok", "?")
-                            attempts = result_obj.get("ocr_attempts", 1)
                             data_rows = len(getattr(model, "data", {}))
-                            await progress_queue.put(("success", f"✅ {original_name} - {st_name_short}: rok {rok}, {data_rows} řádků"))
+                            # Use date from disambiguation instead of rok from OCR
+                            if date_display:
+                                await progress_queue.put(("success", f"✅ {original_name} - {st_name_short}: {date_display}, {data_rows} řádků"))
+                            else:
+                                rok = getattr(model, "rok", "?")
+                                await progress_queue.put(("success", f"✅ {original_name} - {st_name_short}: rok {rok}, {data_rows} řádků"))
                         else:
                             await progress_queue.put(("error", f"⚠ {original_name} - {st_name_short}: zpracováno s chybami"))
                         
@@ -914,6 +940,10 @@ async def process_pdf_stream(
                     # Process all statement types concurrently and collect results
                     statement_tasks = [process_statement(st_type) for st_type in present_types]
                     results = await asyncio.gather(*statement_tasks)
+                    
+                    # Log what we're returning
+                    for r in results:
+                        logger.info(f"Returning result: {original_name} - {r.get('statement_type')} - datum={r.get('disambiguation_info', {}).get('datum', 'N/A')}")
                     
                     return list(results)
                 except Exception as e:
@@ -929,10 +959,9 @@ async def process_pdf_stream(
             
             # Monitor progress queue and yield events in real-time
             all_results = []
-            completed_tasks = 0
-            total_tasks = len(file_tasks)
+            processed_tasks = set()  # Track which tasks we've already processed
             
-            while completed_tasks < total_tasks:
+            while len(processed_tasks) < len(file_tasks):
                 # Check for progress messages (non-blocking with timeout)
                 try:
                     event_type, message = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
@@ -940,16 +969,17 @@ async def process_pdf_stream(
                 except asyncio.TimeoutError:
                     pass
                 
-                # Check if any tasks completed
-                done_tasks = [t for t in file_tasks if t.done()]
-                if len(done_tasks) > completed_tasks:
-                    for task in done_tasks[completed_tasks:]:
+                # Check if any tasks completed and process new ones only
+                for i, task in enumerate(file_tasks):
+                    if task.done() and i not in processed_tasks:
                         try:
                             file_results = await task
                             all_results.extend(file_results)
+                            processed_tasks.add(i)
+                            logger.info(f"Collected results from task {i+1}/{len(file_tasks)}")
                         except Exception as e:
-                            logger.error(f"Task failed: {e}", exc_info=True)
-                    completed_tasks = len(done_tasks)
+                            logger.error(f"Task {i+1} failed: {e}", exc_info=True)
+                            processed_tasks.add(i)  # Mark as processed even if failed
             
             # Drain any remaining messages in the queue
             while not progress_queue.empty():
@@ -963,14 +993,21 @@ async def process_pdf_stream(
                 yield send_event("Žádné výkazy nebyly úspěšně zpracovány", "error")
                 return
             
+            # Log all results for debugging
+            for r in all_results:
+                file_name = r.get("original", "unknown")
+                st_type = r.get("statement_type", "unknown")
+                datum = r.get("disambiguation_info", {}).get("datum", "N/A")
+                logger.info(f"Stream result check: {file_name} - {st_type} - datum={datum}")
+            
             # Create Excel
             yield send_event("📊 Vytvářím Excel soubor s vašimi daty...")
             
             balance_sheets = [r for r in all_results if r["statement_type"] == "rozvaha"]
             if balance_sheets:
-                latest_bs = max(balance_sheets, key=lambda x: getattr(x["model"], "rok", 0))
-                year = getattr(latest_bs["model"], "rok", "")
-                filename = f"Data_valuagent_{year}.xlsx"
+                latest_bs = max(balance_sheets, key=lambda x: get_datum_for_sorting(x))
+                year = extract_year_from_datum(latest_bs)
+                filename = f"Data_valuagent_{year}.xlsx" if year else "Data_valuagent.xlsx"
             else:
                 filename = "Data_valuagent.xlsx"
             
