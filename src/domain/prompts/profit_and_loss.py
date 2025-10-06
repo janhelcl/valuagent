@@ -21,10 +21,14 @@ Dej pozor v jakých jednotkách je výkaz vyjádřen. Použij stejné jednotky v
 Některé položky můžou ve výkazu zisku a ztráty chybět, pokud tomu tak je, vrať hodnoty 0.
 Ke každé položce potřebujeme současné a minulé období.
 
+V hlavičce výkazu je uvedeno v jakých jednotkách je výkaz vyjádřen. Použij stejné jednotky ve výstupu, čísla nijak nepřeváděj.
+Do výstupu uveď jednotky jako integer. Např. "Kč" -> 1, "tis. Kč" -> 1000, "mil. Kč" -> 1000000.
+
 Vracíš pouze json, nic jiného.
 Formát:
 {
     "rok": 2024,
+    "jednotky": 1000,
     "data": {
         "1": {
             "současné": 100000,

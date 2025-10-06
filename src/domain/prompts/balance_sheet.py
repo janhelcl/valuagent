@@ -24,11 +24,15 @@ Dej pozor v jakých jednotkách je výkaz vyjádřen. Použij stejné jednotky v
 Ke každé aktivní položce potřebujeme Brutto, Korekce, Netto a Netto v minulém období.
 Pasivní položky jsou udávany pouze jedním stavem (Netto), potřebujeme tedy extrahovat Netto a Netto v minulém období.
 
+V hlavičce výkazu je uvedeno v jakých jednotkách je výkaz vyjádřen. Použij stejné jednotky ve výstupu, čísla nijak nepřeváděj.
+Do výstupu uveď jednotky jako integer. Např. "Kč" -> 1, "tis. Kč" -> 1000, "mil. Kč" -> 1000000.
+
 Vracíš pouze json, nic jiného.
 Jednotlivé položky označuj podle číselného sloupečku "Označení"
 Formát:
 {
     "rok": 2024,
+    "jednotky": 1000,
     "data": {
         "1": {
             "brutto": 100000,
