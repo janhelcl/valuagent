@@ -4,37 +4,23 @@ from pydantic import BaseModel, Field, model_validator
 from src.domain.models.rules import PREDEFINED_VALIDATION_RULES, ValidationRule
 
 
+class BruttoKorekceNettoError(BaseModel):
+    """Error when brutto - korekce != netto for a row."""
+    row_id: int
+    brutto: int
+    korekce: int
+    netto: int
+    expected_netto: int
+    difference: int
+    tolerance: int
+
+
 class BalanceSheetRow(BaseModel):
     """Represents a single row in the balance sheet."""
     brutto: Optional[int] = Field(default=None, description="Brutto amount")
     korekce: Optional[int] = Field(default=None, description="Correction amount")
     netto: int = Field(default=0, description="Net amount")
     netto_minule: int = Field(default=0, description="Previous year net amount")
-
-    @model_validator(mode='after')
-    def validate_brutto_korekce_netto(self, info):
-        if self.brutto is not None and self.korekce is not None:
-            expected_netto = self.brutto - abs(self.korekce)
-            tolerance = 0
-            if hasattr(self, 'model_config') and 'tolerance' in self.model_config:
-                tolerance = self.model_config['tolerance']
-            elif info.context and 'tolerance' in info.context:
-                tolerance = info.context['tolerance']
-            difference = abs(self.netto - expected_netto)
-            if difference > tolerance:
-                raise ValueError(
-                    f"Brutto - Korekce validation failed: brutto ({self.brutto}) - korekce ({abs(self.korekce)}) = {expected_netto}, "
-                    f"but netto is {self.netto} (difference: {difference}, tolerance: {tolerance})"
-                )
-        return self
-
-    @classmethod
-    def with_tolerance(cls, tolerance: int = 0, **kwargs):
-        row = cls(**kwargs)
-        if not hasattr(row, 'model_config'):
-            row.model_config = {}
-        row.model_config['tolerance'] = tolerance
-        return row
 
 
 class BalanceSheet(BaseModel):
@@ -51,10 +37,33 @@ class BalanceSheet(BaseModel):
     def validate_consistency(self, info):
         errors = []
         structured_errors = []
+        brutto_korekce_errors = []
         tolerance = self.tolerance
         if tolerance == 0 and info.context and 'tolerance' in info.context:
             tolerance = info.context['tolerance']
             self.tolerance = tolerance
+
+        # Validate brutto - korekce = netto for each row
+        for row_id, row_data in self.data.items():
+            if row_data.brutto is not None and row_data.korekce is not None:
+                expected_netto = row_data.brutto - abs(row_data.korekce)
+                difference = abs(row_data.netto - expected_netto)
+                if difference > tolerance:
+                    error_msg = (
+                        f"Brutto - Korekce validation failed for row {row_id}: "
+                        f"brutto ({row_data.brutto}) - korekce ({abs(row_data.korekce)}) = {expected_netto}, "
+                        f"but netto is {row_data.netto} (difference: {difference}, tolerance: {tolerance})"
+                    )
+                    errors.append(error_msg)
+                    brutto_korekce_errors.append(BruttoKorekceNettoError(
+                        row_id=row_id,
+                        brutto=row_data.brutto,
+                        korekce=row_data.korekce,
+                        netto=row_data.netto,
+                        expected_netto=expected_netto,
+                        difference=difference,
+                        tolerance=tolerance
+                    ))
 
         for rule in PREDEFINED_VALIDATION_RULES:
             is_valid, error_msg, structured = rule.validate_netto(self.data, tolerance=tolerance)
@@ -73,6 +82,7 @@ class BalanceSheet(BaseModel):
             # Store structured errors in context for later retrieval
             if info.context:
                 info.context['structured_errors'] = structured_errors
+                info.context['brutto_korekce_errors'] = brutto_korekce_errors
             raise ValueError("Balance sheet validation failed:\n" + "\n".join(f"- {error}" for error in errors))
         return self
 

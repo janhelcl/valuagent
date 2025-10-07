@@ -614,6 +614,55 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         sheet.cell(row=row, column=1, value="Žádné problémy")
         row += 2
     
+    # Section: Brutto - Korekce = Netto errors
+    sheet.cell(row=row, column=1, value="Problémy Brutto - Korekce = Netto").font = Font(bold=True)
+    row += 1
+    
+    found_brutto_errors = False
+    for r in results:
+        st = r.get("statement_type")
+        if st != "rozvaha":
+            continue
+        
+        brutto_errors = r.get("brutto_korekce_errors") or []
+        if not brutto_errors:
+            continue
+        
+        found_brutto_errors = True
+        file_name = r.get("original")
+        model = r.get("model")
+        
+        # Get date from disambiguation info, or fallback to rok from model
+        date_str = format_datum_for_excel(r)
+        if not date_str:
+            rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+            date_display = rok if rok else "N/A"
+        else:
+            date_display = date_str
+        
+        sheet.cell(row=row, column=1, value=f"Soubor: {file_name}")
+        sheet.cell(row=row, column=2, value=f"Datum: {date_display}")
+        row += 1
+        
+        # Sort by difference (largest first)
+        sorted_errors = sorted(brutto_errors, key=lambda x: x.difference, reverse=True)
+        
+        for error in sorted_errors:
+            row_name = get_row_name(error.row_id, st)
+            msg = (f"ř. {error.row_id} ({row_name}): "
+                   f"Brutto {error.brutto} - Korekce {abs(error.korekce)} = {error.expected_netto}, "
+                   f"ale Netto je {error.netto}. Rozdíl {error.difference} > tolerance {error.tolerance}.")
+            sheet.cell(row=row, column=2, value=msg)
+            row += 1
+        
+        row += 1  # Blank row after each file
+    
+    if not found_brutto_errors:
+        sheet.cell(row=row, column=1, value="Žádné problémy")
+        row += 1
+    
+    row += 1  # Extra blank row before next section
+    
     # Section 1: Cross-statement issues (BS vs PnL)
     sheet.cell(row=row, column=1, value="Problémy mezi výkazy (Rozvaha vs Výsledovka)").font = Font(bold=True)
     row += 1

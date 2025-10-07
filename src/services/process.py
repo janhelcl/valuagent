@@ -434,6 +434,7 @@ async def ocr_and_validate_with_retries(
     # All attempts failed; return best-effort model with final error
     best_effort_model = None
     structured_errors = []
+    brutto_korekce_errors = []
     
     if isinstance(last_raw, dict):
         try:
@@ -464,8 +465,25 @@ async def ocr_and_validate_with_retries(
             # Now validate manually to collect structured errors
             if best_effort_model:
                 from src.domain.models.rules import PREDEFINED_VALIDATION_RULES, PREDEFINED_PL_VALIDATION_RULES, PREDEFINED_PL_FLEXIBLE_RULES
+                from src.domain.models.balance_sheet import BruttoKorekceNettoError
                 
                 if statement_type == "rozvaha":
+                    # Check brutto - korekce = netto for each row
+                    for row_id, row_data in best_effort_model.data.items():
+                        if row_data.brutto is not None and row_data.korekce is not None:
+                            expected_netto = row_data.brutto - abs(row_data.korekce)
+                            difference = abs(row_data.netto - expected_netto)
+                            if difference > tolerance:
+                                brutto_korekce_errors.append(BruttoKorekceNettoError(
+                                    row_id=row_id,
+                                    brutto=row_data.brutto,
+                                    korekce=row_data.korekce,
+                                    netto=row_data.netto,
+                                    expected_netto=expected_netto,
+                                    difference=difference,
+                                    tolerance=tolerance
+                                ))
+                    
                     for rule in PREDEFINED_VALIDATION_RULES:
                         is_valid, _, structured = rule.validate_netto(best_effort_model.data, tolerance=tolerance)
                         if not is_valid and structured:
@@ -490,7 +508,7 @@ async def ocr_and_validate_with_retries(
     # Return only the final validation error (the one from the data we're actually using)
     validation_errors = final_validation_errors if final_validation_errors else []
     
-    return {
+    result = {
         "statement_type": statement_type,
         "model": best_effort_model,
         "raw": last_raw,
@@ -499,3 +517,9 @@ async def ocr_and_validate_with_retries(
         "ocr_attempts": attempts,
         "status": "errors",
     }
+    
+    # Add brutto_korekce_errors if it's a balance sheet
+    if statement_type == "rozvaha" and brutto_korekce_errors:
+        result["brutto_korekce_errors"] = brutto_korekce_errors
+    
+    return result
