@@ -471,8 +471,15 @@ def get_row_name(row_num: int, statement_type: str) -> str:
     return row_names.get(row_num, str(row_num))
 
 
-def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
-    """Fill or create the Data - Report Kvality sheet with quality information."""
+def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: Any, tolerance: int) -> None:
+    """Fill or create the Data - Report Kvality sheet with quality information.
+    
+    Args:
+        workbook: Excel workbook to fill
+        results: List of statement results with validation data
+        inter_issues: InterstatementValidationResult with cross-statement and YoY issues
+        tolerance: Tolerance used for validation
+    """
     sheet_name = "Data - Report Kvality"
     
     if sheet_name in workbook.sheetnames:
@@ -607,13 +614,66 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         sheet.cell(row=row, column=1, value="Žádné problémy")
         row += 2
     
-    # Interstatement issues
-    sheet.cell(row=row, column=1, value="Problémy mezi výkazy a mezi roky").font = Font(bold=True)
+    # Section 1: Cross-statement issues (BS vs PnL)
+    sheet.cell(row=row, column=1, value="Problémy mezi výkazy (Rozvaha vs Výsledovka)").font = Font(bold=True)
     row += 1
-    if inter_issues:
-        for msg in inter_issues:
+    
+    if hasattr(inter_issues, 'cross_statement_issues') and inter_issues.cross_statement_issues:
+        for issue in inter_issues.cross_statement_issues:
+            msg = (f"Rok {issue.year}: Rozvaha ř. {issue.bs_row} ({issue.bs_row_name}) {issue.bs_value} ≠ "
+                   f"Výsledovka ř. {issue.pl_row} ({issue.pl_row_name}) {issue.pl_value}. "
+                   f"Rozdíl {issue.difference} > tolerance {issue.tolerance}.")
             sheet.cell(row=row, column=1, value=msg)
             row += 1
+    else:
+        sheet.cell(row=row, column=1, value="Žádné problémy")
+        row += 1
+    
+    row += 1  # Extra blank row before next section
+    
+    # Section 2: Year-over-year issues
+    sheet.cell(row=row, column=1, value="Problémy mezi roky").font = Font(bold=True)
+    row += 1
+    
+    if hasattr(inter_issues, 'yoy_issues') and inter_issues.yoy_issues:
+        # Group by year
+        from collections import defaultdict
+        issues_by_year = defaultdict(list)
+        for issue in inter_issues.yoy_issues:
+            issues_by_year[issue.current_year].append(issue)
+        
+        # Sort years
+        sorted_years = sorted(issues_by_year.keys())
+        
+        for year in sorted_years:
+            # Year header
+            sheet.cell(row=row, column=1, value=f"Rok {year}:").font = Font(bold=True)
+            row += 1
+            
+            year_issues = issues_by_year[year]
+            # Sort by difference (largest to lowest)
+            year_issues.sort(key=lambda x: x.difference, reverse=True)
+            
+            # Track last difference to add blank rows between different values
+            last_difference = None
+            
+            for issue in year_issues:
+                # Add blank row if difference changed
+                if last_difference is not None and issue.difference != last_difference:
+                    row += 1
+                
+                # Format the message
+                statement_label = "Rozvaha" if issue.statement_type == "rozvaha" else "Výsledovka"
+                msg = (f"{statement_label}, ř. {issue.row_id} ({issue.row_name}): "
+                       f"rok {issue.current_year} (sl. minulé) {issue.current_value} ≠ "
+                       f"rok {issue.prior_year} (sl. běžné) {issue.prior_value}. "
+                       f"Rozdíl {issue.difference} > tolerance {issue.tolerance}.")
+                sheet.cell(row=row, column=1, value=msg)
+                row += 1
+                
+                last_difference = issue.difference
+            
+            row += 1  # Blank row after each year
     else:
         sheet.cell(row=row, column=1, value="Žádné problémy")
         row += 1

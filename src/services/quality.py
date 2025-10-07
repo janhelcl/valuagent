@@ -1,8 +1,43 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
+from pydantic import BaseModel, Field
 
 from src.shared import utils
+
+
+class CrossStatementIssue(BaseModel):
+    """Issue found between BS and PnL for the same year."""
+    year: int
+    bs_row: int
+    bs_row_name: str
+    bs_value: int
+    pl_row: int
+    pl_row_name: str
+    pl_value: int
+    difference: int
+    tolerance: int
+    message: str
+
+
+class YearOverYearIssue(BaseModel):
+    """Issue found between consecutive years."""
+    statement_type: str  # "rozvaha" or "vzz"
+    row_id: int
+    row_name: str
+    current_year: int
+    current_value: int
+    prior_year: int
+    prior_value: int
+    difference: int
+    tolerance: int
+    message: str
+
+
+class InterstatementValidationResult(BaseModel):
+    """Result of interstatement validation."""
+    cross_statement_issues: List[CrossStatementIssue] = Field(default_factory=list)
+    yoy_issues: List[YearOverYearIssue] = Field(default_factory=list)
 
 
 def _safe_get_bs_value(result: Dict[str, Any], row_id: int, field: str) -> Optional[int]:
@@ -73,9 +108,10 @@ def _pick_best_per_year(results: List[Dict[str, Any]], statement_type: str) -> D
     return by_year
 
 
-def validate_interstatement(results: List[Dict[str, Any]], tolerance: int) -> List[str]:
-    """Perform interstatement checks and return a list of plain-Czech issue messages."""
-    issues: List[str] = []
+def validate_interstatement(results: List[Dict[str, Any]], tolerance: int) -> InterstatementValidationResult:
+    """Perform interstatement checks and return structured results."""
+    cross_statement_issues: List[CrossStatementIssue] = []
+    yoy_issues: List[YearOverYearIssue] = []
 
     bs_names = utils.load_balance_sheet_row_names()
     pl_names = utils.load_profit_and_loss_row_names()
@@ -92,12 +128,27 @@ def validate_interstatement(results: List[Dict[str, Any]], tolerance: int) -> Li
         pl_val = _safe_get_pl_value(pl, 53, "současné")
         if bs_val is None or pl_val is None:
             continue
-        if abs(bs_val - pl_val) > tolerance:
-            issues.append(
-                f"Rok {year}: Rozvaha ř. 99 ({bs_names.get(99, 'ř. 99')}) {bs_val} ≠ Výsledovka ř. 53 ({pl_names.get(53, 'ř. 53')}) {pl_val}. Rozdíl {abs(bs_val - pl_val)} > tolerance {tolerance}."
+        diff = abs(bs_val - pl_val)
+        if diff > tolerance:
+            message = (
+                f"Rok {year}: Rozvaha ř. 99 ({bs_names.get(99, 'ř. 99')}) {bs_val} ≠ "
+                f"Výsledovka ř. 53 ({pl_names.get(53, 'ř. 53')}) {pl_val}. "
+                f"Rozdíl {diff} > tolerance {tolerance}."
             )
+            cross_statement_issues.append(CrossStatementIssue(
+                year=year,
+                bs_row=99,
+                bs_row_name=bs_names.get(99, "ř. 99"),
+                bs_value=bs_val,
+                pl_row=53,
+                pl_row_name=pl_names.get(53, "ř. 53"),
+                pl_value=pl_val,
+                difference=diff,
+                tolerance=tolerance,
+                message=message
+            ))
 
-    # YoY consistency: BS netto_minule vs prior year's netto; PL minulé vs prior year's současné
+    # YoY consistency: BS netto_minule vs prior year's netto
     for year, bs in bs_by_year.items():
         prev = bs_by_year.get(year - 1)
         if not prev:
@@ -117,11 +168,27 @@ def validate_interstatement(results: List[Dict[str, Any]], tolerance: int) -> Li
             curr_prev = _safe_get_bs_value(bs, rid_int, "netto_minule")
             if prev_netto is None or curr_prev is None:
                 continue
-            if abs(curr_prev - prev_netto) > tolerance:
-                issues.append(
-                    f"Rozvaha, ř. {rid_int} ({bs_names.get(rid_int, str(rid_int))}): rok {year} (sl. minulé) {curr_prev} ≠ rok {year-1} (sl. běžné) {prev_netto}. Rozdíl {abs(curr_prev - prev_netto)} > tolerance {tolerance}."
+            diff = abs(curr_prev - prev_netto)
+            if diff > tolerance:
+                message = (
+                    f"Rozvaha, ř. {rid_int} ({bs_names.get(rid_int, str(rid_int))}): "
+                    f"rok {year} (sl. minulé) {curr_prev} ≠ rok {year-1} (sl. běžné) {prev_netto}. "
+                    f"Rozdíl {diff} > tolerance {tolerance}."
                 )
+                yoy_issues.append(YearOverYearIssue(
+                    statement_type="rozvaha",
+                    row_id=rid_int,
+                    row_name=bs_names.get(rid_int, str(rid_int)),
+                    current_year=year,
+                    current_value=curr_prev,
+                    prior_year=year - 1,
+                    prior_value=prev_netto,
+                    difference=diff,
+                    tolerance=tolerance,
+                    message=message
+                ))
 
+    # YoY consistency: PL minulé vs prior year's současné
     for year, pl in pl_by_year.items():
         prev = pl_by_year.get(year - 1)
         if not prev:
@@ -141,11 +208,29 @@ def validate_interstatement(results: List[Dict[str, Any]], tolerance: int) -> Li
             curr_minule = _safe_get_pl_value(pl, rid_int, "minulé")
             if prev_soucasne is None or curr_minule is None:
                 continue
-            if abs(curr_minule - prev_soucasne) > tolerance:
-                issues.append(
-                    f"Výsledovka, ř. {rid_int} ({pl_names.get(rid_int, str(rid_int))}): rok {year} (sl. minulé) {curr_minule} ≠ rok {year-1} (sl. běžné) {prev_soucasne}. Rozdíl {abs(curr_minule - prev_soucasne)} > tolerance {tolerance}."
+            diff = abs(curr_minule - prev_soucasne)
+            if diff > tolerance:
+                message = (
+                    f"Výsledovka, ř. {rid_int} ({pl_names.get(rid_int, str(rid_int))}): "
+                    f"rok {year} (sl. minulé) {curr_minule} ≠ rok {year-1} (sl. běžné) {prev_soucasne}. "
+                    f"Rozdíl {diff} > tolerance {tolerance}."
                 )
+                yoy_issues.append(YearOverYearIssue(
+                    statement_type="vzz",
+                    row_id=rid_int,
+                    row_name=pl_names.get(rid_int, str(rid_int)),
+                    current_year=year,
+                    current_value=curr_minule,
+                    prior_year=year - 1,
+                    prior_value=prev_soucasne,
+                    difference=diff,
+                    tolerance=tolerance,
+                    message=message
+                ))
 
-    return issues
+    return InterstatementValidationResult(
+        cross_statement_issues=cross_statement_issues,
+        yoy_issues=yoy_issues
+    )
 
 
