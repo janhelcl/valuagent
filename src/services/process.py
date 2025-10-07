@@ -433,6 +433,8 @@ async def ocr_and_validate_with_retries(
 
     # All attempts failed; return best-effort model with final error
     best_effort_model = None
+    structured_errors = []
+    
     if isinstance(last_raw, dict):
         try:
             # Build a model instance without triggering validators
@@ -458,6 +460,30 @@ async def ocr_and_validate_with_retries(
                 best_effort_model = construct_bs(last_raw)
             else:
                 best_effort_model = construct_pl(last_raw)
+            
+            # Now validate manually to collect structured errors
+            if best_effort_model:
+                from src.domain.models.rules import PREDEFINED_VALIDATION_RULES, PREDEFINED_PL_VALIDATION_RULES, PREDEFINED_PL_FLEXIBLE_RULES
+                
+                if statement_type == "rozvaha":
+                    for rule in PREDEFINED_VALIDATION_RULES:
+                        is_valid, _, structured = rule.validate_netto(best_effort_model.data, tolerance=tolerance)
+                        if not is_valid and structured:
+                            structured_errors.append(structured)
+                        is_valid_prev, _, structured_prev = rule.validate_netto_minule(best_effort_model.data, tolerance=tolerance)
+                        if not is_valid_prev and structured_prev:
+                            structured_errors.append(structured_prev)
+                else:
+                    for field in ['současné', 'minulé']:
+                        for rule in PREDEFINED_PL_VALIDATION_RULES:
+                            is_valid, _, structured = rule.validate_profit_and_loss(best_effort_model.data, field=field, tolerance=tolerance)
+                            if not is_valid and structured:
+                                structured_errors.append(structured)
+                        for flexible_rule in PREDEFINED_PL_FLEXIBLE_RULES:
+                            is_valid, _, structured = flexible_rule.validate_profit_and_loss(best_effort_model.data, field=field, tolerance=tolerance)
+                            if not is_valid and structured:
+                                structured_errors.append(structured)
+                
         except Exception as e:
             logger.error(f"Failed to construct best-effort model: {e}")
 
@@ -469,6 +495,7 @@ async def ocr_and_validate_with_retries(
         "model": best_effort_model,
         "raw": last_raw,
         "validation_errors": validation_errors,
+        "structured_errors": structured_errors,
         "ocr_attempts": attempts,
         "status": "errors",
     }

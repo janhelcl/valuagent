@@ -461,6 +461,16 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
 
 
+def get_row_name(row_num: int, statement_type: str) -> str:
+    """Get the row name for a given row number."""
+    from src.shared import utils
+    if statement_type == "rozvaha":
+        row_names = utils.load_balance_sheet_row_names()
+    else:
+        row_names = utils.load_profit_and_loss_row_names()
+    return row_names.get(row_num, str(row_num))
+
+
 def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
     """Fill or create the Data - Report Kvality sheet with quality information."""
     sheet_name = "Data - Report Kvality"
@@ -522,10 +532,10 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         found_errors = True
         file_name = r.get("original")
         st = r.get("statement_type")
+        model = r.get("model")
         # Get date from disambiguation info, or fallback to rok from model
         date_str = format_datum_for_excel(r)
         if not date_str:
-            model = r.get("model")
             rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
             date_display = rok if rok else "N/A"
         else:
@@ -534,9 +544,48 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         sheet.cell(row=row, column=2, value=f"Výkaz: {st}")
         sheet.cell(row=row, column=3, value=f"Datum: {date_display}")
         row += 1
-        for msg in errs:
-            sheet.cell(row=row, column=2, value=msg)
-            row += 1
+        
+        # Check if structured errors are available
+        structured_errs = r.get("structured_errors") or []
+        
+        if structured_errs:
+            # Use structured errors for detailed multi-row format
+            for structured in structured_errs:
+                # Display in multi-row format
+                # Column A: Sign, Column B: Row reference, Column C: Value
+                for src in structured.source_components:
+                    sheet.cell(row=row, column=1, value=src["operation"])
+                    row_name = get_row_name(src["row"], st)
+                    sheet.cell(row=row, column=2, value=f"ř. {src['row']} {row_name}")
+                    sheet.cell(row=row, column=3, value=src["value"])
+                    row += 1
+                
+                # Sum row (equal sign with calculated sum)
+                sheet.cell(row=row, column=1, value="=")
+                sheet.cell(row=row, column=3, value=structured.calculated_sum)
+                row += 1
+                
+                # Not equal row (actual target value)
+                sheet.cell(row=row, column=1, value="≠")
+                target_name = get_row_name(structured.target_row, st)
+                sheet.cell(row=row, column=2, value=f"ř. {structured.target_row} {target_name}")
+                sheet.cell(row=row, column=3, value=structured.target_value)
+                row += 1
+                
+                # Difference row
+                diff_msg = f"Rozdíl {structured.difference} > tolerance {structured.tolerance}"
+                sheet.cell(row=row, column=2, value=diff_msg)
+                row += 1
+                
+                # Blank row between errors
+                row += 1
+        else:
+            # Fallback to string messages if structured errors not available
+            for msg in errs:
+                sheet.cell(row=row, column=2, value=msg)
+                row += 1
+        
+        # Extra blank row after all errors for this file
         row += 1
     
     if not found_errors:

@@ -50,21 +50,29 @@ class BalanceSheet(BaseModel):
     @model_validator(mode='after')
     def validate_consistency(self, info):
         errors = []
+        structured_errors = []
         tolerance = self.tolerance
         if tolerance == 0 and info.context and 'tolerance' in info.context:
             tolerance = info.context['tolerance']
             self.tolerance = tolerance
 
         for rule in PREDEFINED_VALIDATION_RULES:
-            is_valid, error_msg = rule.validate_netto(self.data, tolerance=tolerance)
+            is_valid, error_msg, structured = rule.validate_netto(self.data, tolerance=tolerance)
             if not is_valid:
                 errors.append(error_msg)
+                if structured:
+                    structured_errors.append(structured)
             # Also validate hierarchical rules for previous year column
-            is_valid_prev, error_msg_prev = rule.validate_netto_minule(self.data, tolerance=tolerance)
+            is_valid_prev, error_msg_prev, structured_prev = rule.validate_netto_minule(self.data, tolerance=tolerance)
             if not is_valid_prev:
                 errors.append(error_msg_prev)
+                if structured_prev:
+                    structured_errors.append(structured_prev)
 
         if errors:
+            # Store structured errors in context for later retrieval
+            if info.context:
+                info.context['structured_errors'] = structured_errors
             raise ValueError("Balance sheet validation failed:\n" + "\n".join(f"- {error}" for error in errors))
         return self
 
@@ -76,7 +84,8 @@ class BalanceSheet(BaseModel):
     def validate_rule(self, target_row: int, source_rows: List[int], tolerance: Optional[int] = None) -> Tuple[bool, str]:
         rule = ValidationRule(target_row=target_row, source_rows=source_rows)
         used_tolerance = tolerance if tolerance is not None else self.tolerance
-        return rule.validate_netto(self.data, tolerance=used_tolerance)
+        is_valid, msg, _ = rule.validate_netto(self.data, tolerance=used_tolerance)
+        return is_valid, msg
 
     def summary_report(self) -> str:
         report = [
@@ -90,7 +99,7 @@ class BalanceSheet(BaseModel):
         all_valid = True
         for i, rule in enumerate(PREDEFINED_VALIDATION_RULES, 1):
             report.append(f"Rule {i}: Row {rule.target_row} = {' + '.join(str(r) for r in rule.source_rows)}")
-            is_valid, error_msg = rule.validate_netto(self.data, tolerance=self.tolerance)
+            is_valid, error_msg, _ = rule.validate_netto(self.data, tolerance=self.tolerance)
             status = "✓" if is_valid else "✗"
             report.append(f"  Netto: {status}")
             if not is_valid:
