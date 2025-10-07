@@ -1,5 +1,19 @@
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from pydantic import BaseModel, Field
+
+
+class StructuredValidationError(BaseModel):
+    """Structured validation error with all components for detailed reporting."""
+    rule_type: str = Field(..., description="Type of rule: 'hierarchical' or 'flexible'")
+    statement_type: str = Field(..., description="Statement type: 'rozvaha' or 'vzz'")
+    field: str = Field(..., description="Field being validated (e.g., 'netto', 'současné')")
+    target_row: int = Field(..., description="Target row number")
+    target_value: int = Field(..., description="Actual value in target row")
+    source_components: List[Dict[str, Any]] = Field(..., description="List of {row: int, value: int, operation: str}")
+    calculated_sum: int = Field(..., description="Sum calculated from source components")
+    difference: int = Field(..., description="Absolute difference")
+    tolerance: int = Field(..., description="Tolerance used")
+    message: str = Field(..., description="Human-readable error message")
 
 
 class ValidationRule(BaseModel):
@@ -7,30 +21,121 @@ class ValidationRule(BaseModel):
     target_row: int = Field(..., description="Target row number (left side of equation)")
     source_rows: List[int] = Field(..., description="Source row numbers (right side of equation)")
 
-    def validate_netto(self, balance_data: Dict[int, "BalanceSheetRow"], tolerance: int = 0) -> Tuple[bool, str]:
+    def validate_netto(self, balance_data: Dict[int, "BalanceSheetRow"], tolerance: int = 0) -> Tuple[bool, str, Optional[StructuredValidationError]]:
         target_value = balance_data.get(self.target_row, None).netto if self.target_row in balance_data else 0
         source_sum = sum(balance_data[s].netto for s in self.source_rows if s in balance_data)
         difference = abs(target_value - source_sum)
         if difference <= tolerance:
-            return True, ""
-        return False, (
+            return True, "", None
+        
+        message = (
             f"Rule validation failed for netto: Row {self.target_row} ({target_value}) != "
             f"Sum of rows {'+'.join(str(row) for row in self.source_rows)} ({source_sum}) "
             f"(difference: {difference}, tolerance: {tolerance})"
         )
+        
+        # Build structured error
+        source_components = []
+        for row in self.source_rows:
+            if row in balance_data:
+                source_components.append({
+                    "row": row,
+                    "value": balance_data[row].netto,
+                    "operation": "+"
+                })
+        
+        structured = StructuredValidationError(
+            rule_type="hierarchical",
+            statement_type="rozvaha",
+            field="netto",
+            target_row=self.target_row,
+            target_value=target_value,
+            source_components=source_components,
+            calculated_sum=source_sum,
+            difference=difference,
+            tolerance=tolerance,
+            message=message
+        )
+        
+        return False, message, structured
 
-    def validate_netto_minule(self, balance_data: Dict[int, "BalanceSheetRow"], tolerance: int = 0) -> Tuple[bool, str]:
+    def validate_netto_minule(self, balance_data: Dict[int, "BalanceSheetRow"], tolerance: int = 0) -> Tuple[bool, str, Optional[StructuredValidationError]]:
         """Validate the same hierarchical rules but on the previous-year column (netto_minule)."""
         target_value = balance_data.get(self.target_row, None).netto_minule if self.target_row in balance_data else 0
         source_sum = sum(balance_data[s].netto_minule for s in self.source_rows if s in balance_data)
         difference = abs(target_value - source_sum)
         if difference <= tolerance:
-            return True, ""
-        return False, (
+            return True, "", None
+        
+        message = (
             f"Rule validation failed for netto_minule: Row {self.target_row} ({target_value}) != "
             f"Sum of rows {'+'.join(str(row) for row in self.source_rows)} ({source_sum}) "
             f"(difference: {difference}, tolerance: {tolerance})"
         )
+        
+        # Build structured error
+        source_components = []
+        for row in self.source_rows:
+            if row in balance_data:
+                source_components.append({
+                    "row": row,
+                    "value": balance_data[row].netto_minule,
+                    "operation": "+"
+                })
+        
+        structured = StructuredValidationError(
+            rule_type="hierarchical",
+            statement_type="rozvaha",
+            field="netto_minule",
+            target_row=self.target_row,
+            target_value=target_value,
+            source_components=source_components,
+            calculated_sum=source_sum,
+            difference=difference,
+            tolerance=tolerance,
+            message=message
+        )
+        
+        return False, message, structured
+    
+    def validate_profit_and_loss(self, pl_data: Dict[int, "ProfitAndLossRow"], field: str = 'současné', tolerance: int = 0) -> Tuple[bool, str, Optional[StructuredValidationError]]:
+        """Validate profit and loss statement using simple addition (no subtraction)."""
+        target_value = getattr(pl_data[self.target_row], field) if self.target_row in pl_data else 0
+        source_sum = sum(getattr(pl_data[s], field) for s in self.source_rows if s in pl_data)
+        difference = abs(target_value - source_sum)
+        if difference <= tolerance:
+            return True, "", None
+        
+        message = (
+            f"Rule validation failed for {field}: Row {self.target_row} ({target_value}) != "
+            f"Sum of rows {'+'.join(str(row) for row in self.source_rows)} ({source_sum}) "
+            f"(difference: {difference}, tolerance: {tolerance})"
+        )
+        
+        # Build structured error
+        source_components = []
+        for row in self.source_rows:
+            if row in pl_data:
+                source_components.append({
+                    "row": row,
+                    "value": getattr(pl_data[row], field),
+                    "operation": "+"
+                })
+        
+        structured = StructuredValidationError(
+            rule_type="hierarchical",
+            statement_type="vzz",
+            field=field,
+            target_row=self.target_row,
+            target_value=target_value,
+            source_components=source_components,
+            calculated_sum=source_sum,
+            difference=difference,
+            tolerance=tolerance,
+            message=message
+        )
+        
+        return False, message, structured
 
 
 class FlexibleValidationRule(BaseModel):
@@ -38,10 +143,12 @@ class FlexibleValidationRule(BaseModel):
     target_row: int = Field(..., description="Target row number (left side of equation)")
     source_expressions: List[Tuple[int, int]] = Field(..., description="List of (row_number, operation) where operation is +1 or -1")
 
-    def validate_profit_and_loss(self, pl_data: Dict[int, "ProfitAndLossRow"], field: str = 'současné', tolerance: int = 0) -> Tuple[bool, str]:
+    def validate_profit_and_loss(self, pl_data: Dict[int, "ProfitAndLossRow"], field: str = 'současné', tolerance: int = 0) -> Tuple[bool, str, Optional[StructuredValidationError]]:
         target_value = getattr(pl_data[self.target_row], field) if self.target_row in pl_data else 0
         calculated_value = 0
         expression_parts: List[str] = []
+        source_components = []
+        
         for row_number, operation in self.source_expressions:
             if row_number in pl_data:
                 row_value = getattr(pl_data[row_number], field)
@@ -51,15 +158,39 @@ class FlexibleValidationRule(BaseModel):
                     expression_parts.append(str(row_number))
                 else:
                     expression_parts.append(f"{op_symbol}{row_number}")
+                
+                # Add to source components
+                source_components.append({
+                    "row": row_number,
+                    "value": row_value,
+                    "operation": "+" if operation > 0 else "-"
+                })
 
         difference = abs(target_value - calculated_value)
         if difference <= tolerance:
-            return True, ""
+            return True, "", None
+        
         expression_str = "".join(expression_parts)
-        return False, (
+        message = (
             f"Flexible rule validation failed for {field}: Row {self.target_row} ({target_value}) != "
             f"{expression_str} ({calculated_value}) (difference: {difference}, tolerance: {tolerance})"
         )
+        
+        # Build structured error
+        structured = StructuredValidationError(
+            rule_type="flexible",
+            statement_type="vzz",
+            field=field,
+            target_row=self.target_row,
+            target_value=target_value,
+            source_components=source_components,
+            calculated_sum=calculated_value,
+            difference=difference,
+            tolerance=tolerance,
+            message=message
+        )
+        
+        return False, message, structured
 
 
 def generate_validation_rules() -> list:
