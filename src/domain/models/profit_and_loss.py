@@ -24,8 +24,12 @@ class ProfitAndLossRow(BaseModel):
 
 
 class ProfitAndLoss(BaseModel):
-    """Czech profit and loss statement with preconfigured validation rules."""
+    """Czech profit and loss statement with preconfigured validation rules.
+    
+    Note: All values are normalized to thousands (jednotky=1000) before validation.
+    """
     rok: int = Field(..., description="Year of the profit and loss statement")
+    jednotky: int = Field(default=1000, description="Units multiplier (always 1000 after normalization)")
     data: Dict[int, ProfitAndLossRow] = Field(..., description="Profit and loss data by row number")
     tolerance: int = Field(default=0, description="Tolerance for validation rules (default: 0 for exact validation)")
 

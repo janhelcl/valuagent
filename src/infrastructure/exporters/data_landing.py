@@ -480,14 +480,16 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
     sheet["A1"] = "Kvalita dat"
     sheet["A1"].font = Font(bold=True, size=14)
     sheet["A2"] = f"Tolerance: {tolerance}"
+    sheet["A3"] = "Poznámka: Všechny hodnoty jsou normalizovány na tisíce (tis. Kč)"
+    sheet["A3"].font = Font(italic=True)
     
     # Overview table
     headers = ["Soubor", "Výkaz", "Datum", "Pokusy OCR", "Status", "Počet problémů"]
     for col, h in enumerate(headers, start=1):
-        cell = sheet.cell(row=4, column=col, value=h)
+        cell = sheet.cell(row=5, column=col, value=h)
         cell.font = Font(bold=True)
     
-    row = 5
+    row = 6
     for r in results:
         file_name = r.get("original")
         st = r.get("statement_type")
