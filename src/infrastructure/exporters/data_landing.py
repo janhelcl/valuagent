@@ -611,7 +611,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         row += 1
     
     if not found_errors:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 2
     
     # Section: Brutto - Korekce = Netto errors
@@ -658,7 +658,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         row += 1  # Blank row after each file
     
     if not found_brutto_errors:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 1
     
     row += 1  # Extra blank row before next section
@@ -675,7 +675,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
             sheet.cell(row=row, column=1, value=msg)
             row += 1
     else:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 1
     
     row += 1  # Extra blank row before next section
@@ -724,7 +724,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
             
             row += 1  # Blank row after each year
     else:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 1
     
     logger.info(f"Successfully created {sheet_name} sheet")
