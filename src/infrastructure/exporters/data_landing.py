@@ -551,30 +551,45 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         if structured_errs:
             # Use structured errors for detailed multi-row format
             for structured in structured_errs:
+                # Add header indicating which field has the error (current vs past values)
+                field_label = ""
+                if structured.field == "netto":
+                    field_label = "(běžné období)"
+                elif structured.field == "netto_minule":
+                    field_label = "(minulé období)"
+                elif structured.field == "současné":
+                    field_label = "(současné období)"
+                elif structured.field == "minulé":
+                    field_label = "(minulé období)"
+                
+                if field_label:
+                    sheet.cell(row=row, column=1, value=field_label).font = Font(italic=True)
+                    row += 1
+                
                 # Display in multi-row format
-                # Column A: Sign, Column B: Row reference, Column C: Value
+                # Column A: Row reference, Column B: Sign, Column C: Value
                 for src in structured.source_components:
-                    sheet.cell(row=row, column=1, value=src["operation"])
                     row_name = get_row_name(src["row"], st)
-                    sheet.cell(row=row, column=2, value=f"ř. {src['row']} {row_name}")
+                    sheet.cell(row=row, column=1, value=f"ř. {src['row']} {row_name}")
+                    sheet.cell(row=row, column=2, value=src["operation"])
                     sheet.cell(row=row, column=3, value=src["value"])
                     row += 1
                 
                 # Sum row (equal sign with calculated sum)
-                sheet.cell(row=row, column=1, value="=")
+                sheet.cell(row=row, column=2, value="=")
                 sheet.cell(row=row, column=3, value=structured.calculated_sum)
                 row += 1
                 
                 # Not equal row (actual target value)
-                sheet.cell(row=row, column=1, value="≠")
                 target_name = get_row_name(structured.target_row, st)
-                sheet.cell(row=row, column=2, value=f"ř. {structured.target_row} {target_name}")
+                sheet.cell(row=row, column=1, value=f"ř. {structured.target_row} {target_name}")
+                sheet.cell(row=row, column=2, value="≠")
                 sheet.cell(row=row, column=3, value=structured.target_value)
                 row += 1
                 
                 # Difference row
                 diff_msg = f"Rozdíl {structured.difference} > tolerance {structured.tolerance}"
-                sheet.cell(row=row, column=2, value=diff_msg)
+                sheet.cell(row=row, column=1, value=diff_msg)
                 row += 1
                 
                 # Blank row between errors
