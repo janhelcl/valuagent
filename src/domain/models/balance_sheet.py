@@ -38,8 +38,12 @@ class BalanceSheetRow(BaseModel):
 
 
 class BalanceSheet(BaseModel):
-    """Czech balance sheet with preconfigured validation rules."""
+    """Czech balance sheet with preconfigured validation rules.
+    
+    Note: All values are normalized to thousands (jednotky=1000) before validation.
+    """
     rok: int = Field(..., description="Year of the balance sheet")
+    jednotky: int = Field(default=1000, description="Units multiplier (always 1000 after normalization)")
     data: Dict[int, BalanceSheetRow] = Field(..., description="Balance sheet data by row number")
     tolerance: int = Field(default=0, description="Tolerance for validation rules (default: 0 for exact validation)")
 

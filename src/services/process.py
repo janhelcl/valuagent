@@ -17,6 +17,67 @@ from src.infrastructure.clients.genai_client import generate_json_from_pdf, gene
 from src.shared import utils
 
 
+def normalize_to_thousands(data_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize financial data to thousands based on the jednotky (units) field.
+    
+    Args:
+        data_dict: OCR output with 'jednotky' and 'data' fields
+        
+    Returns:
+        Modified dict with all values normalized to thousands (jednotky=1000)
+    """
+    jednotky = data_dict.get("jednotky")
+    if jednotky is None:
+        logger.warning("No 'jednotky' field found in OCR data, assuming thousands (1000)")
+        jednotky = 1000
+    
+    # Skip normalization if already in thousands
+    if jednotky == 1000:
+        logger.debug("Data already in thousands, no normalization needed")
+        return data_dict
+    
+    # Calculate conversion factor to thousands
+    if jednotky == 1:
+        # Units to thousands: divide by 1000
+        factor = 1 / 1000
+        logger.info("Normalizing from units (1) to thousands (1000)")
+    elif jednotky == 1000000:
+        # Millions to thousands: multiply by 1000
+        factor = 1000
+        logger.info("Normalizing from millions (1000000) to thousands (1000)")
+    else:
+        # For any other value, calculate the conversion factor
+        factor = jednotky / 1000
+        logger.warning(f"Unusual jednotky value: {jednotky}, using factor {factor}")
+    
+    # Normalize all numerical fields in the data
+    data = data_dict.get("data", {})
+    normalized_data = {}
+    
+    for row_key, row_value in data.items():
+        if not isinstance(row_value, dict):
+            normalized_data[row_key] = row_value
+            continue
+        
+        normalized_row = {}
+        for field_name, field_value in row_value.items():
+            if isinstance(field_value, (int, float)) and field_value != 0:
+                # Apply conversion factor and round to nearest integer
+                normalized_row[field_name] = round(field_value * factor)
+            else:
+                normalized_row[field_name] = field_value
+        
+        normalized_data[row_key] = normalized_row
+    
+    # Update the dict with normalized values and set jednotky to 1000
+    result = data_dict.copy()
+    result["data"] = normalized_data
+    result["jednotky"] = 1000
+    
+    logger.debug(f"Normalized {len(normalized_data)} rows from jednotky={jednotky} to 1000")
+    return result
+
+
 def pick_prompt(statement_type: str) -> str:
     if statement_type == "rozvaha":
         return balance_sheet_ocr_instructions
@@ -42,6 +103,8 @@ def process_pdf_bytes(pdf_bytes: bytes, statement_type: str, tolerance: int):
     except json.JSONDecodeError:
         data_dict = utils.load_json_from_text(text_response)
 
+    # Normalize to thousands before validation
+    data_dict = normalize_to_thousands(data_dict)
 
     model_obj = validate_payload(statement_type, data_dict, tolerance)
     return model_obj
@@ -104,6 +167,9 @@ async def process_pdf_bytes_async(pdf_bytes: bytes, statement_type: str, toleran
     except json.JSONDecodeError as e:
         logger.warning(f"JSON decode failed: {e}, attempting fallback parsing")
         data_dict = utils.load_json_from_text(text_response)
+
+    # Normalize to thousands before validation
+    data_dict = normalize_to_thousands(data_dict)
 
     logger.info(f"Validating {statement_type} data with tolerance {tolerance}")
     model_obj = validate_payload(statement_type, data_dict, tolerance)
@@ -342,6 +408,8 @@ async def ocr_and_validate_with_retries(
                 final_validation_error = "Neplatný JSON z OCR modelu"
                 continue
 
+        # Normalize to thousands before validation
+        data_dict = normalize_to_thousands(data_dict)
         last_raw = data_dict
 
         try:
