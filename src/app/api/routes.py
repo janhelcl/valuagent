@@ -714,14 +714,8 @@ async def process_pdf(
             
             logger.info(f"Read Excel template: {len(template_content)/1024:.1f}KB")
             
-            # Get year for filename from disambiguation datum (sort by full date, extract year for filename)
-            balance_sheets = [r for r in results if r["statement_type"] == "rozvaha"]
-            if balance_sheets:
-                latest_bs = max(balance_sheets, key=lambda x: get_datum_for_sorting(x))
-                year = extract_year_from_datum(latest_bs)
-                filename = f"Data_valuagent_{year}.xlsx" if year else "Data_valuagent.xlsx"
-            else:
-                filename = "Data_valuagent.xlsx"
+            # Use the original uploaded filename for download
+            filename = excel_template.filename or "Data_valuagent.xlsx"
             
             data_buffer = export_data_landing(results, template_content, tolerance=tolerance, offset=offset)
             
@@ -1003,13 +997,8 @@ async def process_pdf_stream(
             # Create Excel
             yield send_event("📊 Vytvářím Excel soubor s vašimi daty...")
             
-            balance_sheets = [r for r in all_results if r["statement_type"] == "rozvaha"]
-            if balance_sheets:
-                latest_bs = max(balance_sheets, key=lambda x: get_datum_for_sorting(x))
-                year = extract_year_from_datum(latest_bs)
-                filename = f"Data_valuagent_{year}.xlsx" if year else "Data_valuagent.xlsx"
-            else:
-                filename = "Data_valuagent.xlsx"
+            # Use the original uploaded filename for download
+            filename = template_filename or "Data_valuagent.xlsx"
             
             data_buffer = export_data_landing(all_results, template_content, tolerance=tolerance, offset=offset)
             
