@@ -480,7 +480,7 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         inter_issues: InterstatementValidationResult with cross-statement and YoY issues
         tolerance: Tolerance used for validation
     """
-    sheet_name = "Data - Report Kvality"
+    sheet_name = "Data - Report"
     
     if sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
