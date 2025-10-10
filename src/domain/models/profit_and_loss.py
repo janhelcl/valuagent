@@ -36,6 +36,7 @@ class ProfitAndLoss(BaseModel):
     @model_validator(mode='after')
     def validate_consistency(self, info):
         errors = []
+        structured_errors = []
         tolerance = self.tolerance
         if tolerance == 0 and info.context and 'tolerance' in info.context:
             tolerance = info.context['tolerance']
@@ -43,15 +44,22 @@ class ProfitAndLoss(BaseModel):
 
         for field in ['současné', 'minulé']:
             for rule in PREDEFINED_PL_VALIDATION_RULES:
-                is_valid, error_msg = rule.validate_profit_and_loss(self.data, field=field, tolerance=tolerance)
+                is_valid, error_msg, structured = rule.validate_profit_and_loss(self.data, field=field, tolerance=tolerance)
                 if not is_valid:
                     errors.append(error_msg)
+                    if structured:
+                        structured_errors.append(structured)
             for flexible_rule in PREDEFINED_PL_FLEXIBLE_RULES:
-                is_valid, error_msg = flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=tolerance)
+                is_valid, error_msg, structured = flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=tolerance)
                 if not is_valid:
                     errors.append(error_msg)
+                    if structured:
+                        structured_errors.append(structured)
 
         if errors:
+            # Store structured errors in context for later retrieval
+            if info.context:
+                info.context['structured_errors'] = structured_errors
             raise ValueError("Profit and loss validation failed:\n" + "\n".join(f"- {error}" for error in errors))
         return self
 
@@ -63,12 +71,14 @@ class ProfitAndLoss(BaseModel):
     def validate_rule(self, target_row: int, source_rows: List[int], field: str = 'současné', tolerance: Optional[int] = None) -> Tuple[bool, str]:
         rule = ValidationRule(target_row=target_row, source_rows=source_rows)
         used_tolerance = tolerance if tolerance is not None else self.tolerance
-        return rule.validate_profit_and_loss(self.data, field=field, tolerance=used_tolerance)
+        is_valid, msg, _ = rule.validate_profit_and_loss(self.data, field=field, tolerance=used_tolerance)
+        return is_valid, msg
 
     def validate_flexible_rule(self, target_row: int, source_expressions: List[Tuple[int, int]], field: str = 'současné', tolerance: Optional[int] = None) -> Tuple[bool, str]:
         flexible_rule = FlexibleValidationRule(target_row=target_row, source_expressions=source_expressions)
         used_tolerance = tolerance if tolerance is not None else self.tolerance
-        return flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=used_tolerance)
+        is_valid, msg, _ = flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=used_tolerance)
+        return is_valid, msg
 
     def summary_report(self) -> str:
         report = [
@@ -96,7 +106,7 @@ class ProfitAndLoss(BaseModel):
                         expression_parts.append(f"{op_symbol}{row_number}")
                 expression_str = "".join(expression_parts)
                 report.append(f"Hierarchical Rule {i}: Row {rule.target_row} = {expression_str}")
-                is_valid, error_msg = rule.validate_profit_and_loss(self.data, field=field, tolerance=self.tolerance)
+                is_valid, error_msg, _ = rule.validate_profit_and_loss(self.data, field=field, tolerance=self.tolerance)
                 status = "✓" if is_valid else "✗"
                 report.append(f"  {field}: {status}")
                 if not is_valid:
@@ -113,7 +123,7 @@ class ProfitAndLoss(BaseModel):
                         expression_parts.append(f"{op_symbol}{row_number}")
                 expression_str = "".join(expression_parts)
                 report.append(f"Flexible Rule {i}: Row {flexible_rule.target_row} = {expression_str}")
-                is_valid, error_msg = flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=self.tolerance)
+                is_valid, error_msg, _ = flexible_rule.validate_profit_and_loss(self.data, field=field, tolerance=self.tolerance)
                 status = "✓" if is_valid else "✗"
                 report.append(f"  {field}: {status}")
                 if not is_valid:

@@ -461,9 +461,26 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     logger.info(f"Successfully filled {sheet_name} sheet: {total_filled} total values")
 
 
-def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
-    """Fill or create the Data - Report Kvality sheet with quality information."""
-    sheet_name = "Data - Report"
+def get_row_name(row_num: int, statement_type: str) -> str:
+    """Get the row name for a given row number."""
+    from src.shared import utils
+    if statement_type == "rozvaha":
+        row_names = utils.load_balance_sheet_row_names()
+    else:
+        row_names = utils.load_profit_and_loss_row_names()
+    return row_names.get(row_num, str(row_num))
+
+
+def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: Any, tolerance: int) -> None:
+    """Fill or create the Data - Report Kvality sheet with quality information.
+    
+    Args:
+        workbook: Excel workbook to fill
+        results: List of statement results with validation data
+        inter_issues: InterstatementValidationResult with cross-statement and YoY issues
+        tolerance: Tolerance used for validation
+    """
+    sheet_name = "Data - Report Kvality"
     
     if sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
@@ -522,10 +539,10 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         found_errors = True
         file_name = r.get("original")
         st = r.get("statement_type")
+        model = r.get("model")
         # Get date from disambiguation info, or fallback to rok from model
         date_str = format_datum_for_excel(r)
         if not date_str:
-            model = r.get("model")
             rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
             date_display = rok if rok else "N/A"
         else:
@@ -534,24 +551,180 @@ def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[st
         sheet.cell(row=row, column=2, value=f"Výkaz: {st}")
         sheet.cell(row=row, column=3, value=f"Datum: {date_display}")
         row += 1
-        for msg in errs:
-            sheet.cell(row=row, column=2, value=msg)
-            row += 1
+        
+        # Check if structured errors are available
+        structured_errs = r.get("structured_errors") or []
+        
+        if structured_errs:
+            # Use structured errors for detailed multi-row format
+            for structured in structured_errs:
+                # Add header indicating which field has the error (current vs past values)
+                field_label = ""
+                if structured.field == "netto":
+                    field_label = "(běžné období)"
+                elif structured.field == "netto_minule":
+                    field_label = "(minulé období)"
+                elif structured.field == "současné":
+                    field_label = "(současné období)"
+                elif structured.field == "minulé":
+                    field_label = "(minulé období)"
+                
+                if field_label:
+                    sheet.cell(row=row, column=1, value=field_label).font = Font(italic=True)
+                    row += 1
+                
+                # Display in multi-row format
+                # Column A: Row reference, Column B: Sign, Column C: Value
+                for src in structured.source_components:
+                    row_name = get_row_name(src["row"], st)
+                    sheet.cell(row=row, column=1, value=f"ř. {src['row']} {row_name}")
+                    sheet.cell(row=row, column=2, value=src["operation"])
+                    sheet.cell(row=row, column=3, value=src["value"])
+                    row += 1
+                
+                # Sum row (equal sign with calculated sum)
+                sheet.cell(row=row, column=2, value="=")
+                sheet.cell(row=row, column=3, value=structured.calculated_sum)
+                row += 1
+                
+                # Not equal row (actual target value)
+                target_name = get_row_name(structured.target_row, st)
+                sheet.cell(row=row, column=1, value=f"ř. {structured.target_row} {target_name}")
+                sheet.cell(row=row, column=2, value="≠")
+                sheet.cell(row=row, column=3, value=structured.target_value)
+                row += 1
+                
+                # Difference row
+                diff_msg = f"Rozdíl {structured.difference} > tolerance {structured.tolerance}"
+                sheet.cell(row=row, column=1, value=diff_msg)
+                row += 1
+                
+                # Blank row between errors
+                row += 1
+        else:
+            # Fallback to string messages if structured errors not available
+            for msg in errs:
+                sheet.cell(row=row, column=2, value=msg)
+                row += 1
+        
+        # Extra blank row after all errors for this file
         row += 1
     
     if not found_errors:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 2
     
-    # Interstatement issues
-    sheet.cell(row=row, column=1, value="Problémy mezi výkazy a mezi roky").font = Font(bold=True)
+    # Section: Brutto - Korekce = Netto errors
+    sheet.cell(row=row, column=1, value="Problémy Brutto - Korekce = Netto").font = Font(bold=True)
     row += 1
-    if inter_issues:
-        for msg in inter_issues:
+    
+    found_brutto_errors = False
+    for r in results:
+        st = r.get("statement_type")
+        if st != "rozvaha":
+            continue
+        
+        brutto_errors = r.get("brutto_korekce_errors") or []
+        if not brutto_errors:
+            continue
+        
+        found_brutto_errors = True
+        file_name = r.get("original")
+        model = r.get("model")
+        
+        # Get date from disambiguation info, or fallback to rok from model
+        date_str = format_datum_for_excel(r)
+        if not date_str:
+            rok = getattr(model, "rok", None) if model is not None else (r.get("raw") or {}).get("rok")
+            date_display = rok if rok else "N/A"
+        else:
+            date_display = date_str
+        
+        sheet.cell(row=row, column=1, value=f"Soubor: {file_name}")
+        sheet.cell(row=row, column=2, value=f"Datum: {date_display}")
+        row += 1
+        
+        # Sort by difference (largest first)
+        sorted_errors = sorted(brutto_errors, key=lambda x: x.difference, reverse=True)
+        
+        for error in sorted_errors:
+            row_name = get_row_name(error.row_id, st)
+            msg = (f"ř. {error.row_id} ({row_name}): "
+                   f"Brutto {error.brutto} - Korekce {abs(error.korekce)} = {error.expected_netto}, "
+                   f"ale Netto je {error.netto}. Rozdíl {error.difference} > tolerance {error.tolerance}.")
+            sheet.cell(row=row, column=2, value=msg)
+            row += 1
+        
+        row += 1  # Blank row after each file
+    
+    if not found_brutto_errors:
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
+        row += 1
+    
+    row += 1  # Extra blank row before next section
+    
+    # Section 1: Cross-statement issues (BS vs PnL)
+    sheet.cell(row=row, column=1, value="Problémy mezi výkazy (Rozvaha vs Výsledovka)").font = Font(bold=True)
+    row += 1
+    
+    if hasattr(inter_issues, 'cross_statement_issues') and inter_issues.cross_statement_issues:
+        for issue in inter_issues.cross_statement_issues:
+            msg = (f"Rok {issue.year}: Rozvaha ř. {issue.bs_row} ({issue.bs_row_name}) {issue.bs_value} ≠ "
+                   f"Výsledovka ř. {issue.pl_row} ({issue.pl_row_name}) {issue.pl_value}. "
+                   f"Rozdíl {issue.difference} > tolerance {issue.tolerance}.")
             sheet.cell(row=row, column=1, value=msg)
             row += 1
     else:
-        sheet.cell(row=row, column=1, value="Žádné problémy")
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
+        row += 1
+    
+    row += 1  # Extra blank row before next section
+    
+    # Section 2: Year-over-year issues
+    sheet.cell(row=row, column=1, value="Problémy mezi roky").font = Font(bold=True)
+    row += 1
+    
+    if hasattr(inter_issues, 'yoy_issues') and inter_issues.yoy_issues:
+        # Group by year
+        from collections import defaultdict
+        issues_by_year = defaultdict(list)
+        for issue in inter_issues.yoy_issues:
+            issues_by_year[issue.current_year].append(issue)
+        
+        # Sort years
+        sorted_years = sorted(issues_by_year.keys())
+        
+        for year in sorted_years:
+            # Year header
+            sheet.cell(row=row, column=1, value=f"Rok {year}:").font = Font(bold=True)
+            row += 1
+            
+            year_issues = issues_by_year[year]
+            # Sort by difference (largest to lowest)
+            year_issues.sort(key=lambda x: x.difference, reverse=True)
+            
+            # Track last difference to add blank rows between different values
+            last_difference = None
+            
+            for issue in year_issues:
+                # Add blank row if difference changed
+                if last_difference is not None and issue.difference != last_difference:
+                    row += 1
+                
+                # Format the message
+                statement_label = "Rozvaha" if issue.statement_type == "rozvaha" else "Výsledovka"
+                msg = (f"{statement_label}, ř. {issue.row_id} ({issue.row_name}): "
+                       f"rok {issue.current_year} (sl. minulé) {issue.current_value} ≠ "
+                       f"rok {issue.prior_year} (sl. běžné) {issue.prior_value}. "
+                       f"Rozdíl {issue.difference} > tolerance {issue.tolerance}.")
+                sheet.cell(row=row, column=1, value=msg)
+                row += 1
+                
+                last_difference = issue.difference
+            
+            row += 1  # Blank row after each year
+    else:
+        sheet.cell(row=row, column=1, value="Žádné problémy").font = Font(italic=True)
         row += 1
     
     logger.info(f"Successfully created {sheet_name} sheet")
