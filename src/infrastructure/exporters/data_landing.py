@@ -197,7 +197,7 @@ def fill_rozvaha_sheet(workbook: openpyxl.Workbook, balance_sheet_results: List[
         offset: Number of years to skip from the left (default 0)
                 Each year uses 3 columns (Brutto, Korekce, Netto)
     """
-    sheet_name = "Data - Rozvaha"
+    sheet_name = "Data - R"
     
     if sheet_name not in workbook.sheetnames:
         logger.error(f"Sheet '{sheet_name}' not found in template. Available sheets: {workbook.sheetnames}")
@@ -353,7 +353,7 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
         offset: Number of years to skip from the left (default 0)
                 Each year uses 1 column
     """
-    sheet_name = "Data - Výsledovka"
+    sheet_name = "Data - VZZ"
     
     if sheet_name not in workbook.sheetnames:
         logger.error(f"Sheet '{sheet_name}' not found in template. Available sheets: {workbook.sheetnames}")
@@ -362,7 +362,7 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
     sheet = workbook[sheet_name]
     
     if not profit_loss_results:
-        logger.warning("No P&L results available for Data - Výsledovka sheet")
+        logger.warning("No P&L results available for Data - VZZ sheet")
         return
     
     # Limit to 7 years
@@ -463,7 +463,7 @@ def fill_vysledovka_sheet(workbook: openpyxl.Workbook, profit_loss_results: List
 
 def fill_quality_report_sheet(workbook: openpyxl.Workbook, results: List[Dict[str, Any]], inter_issues: List[str], tolerance: int) -> None:
     """Fill or create the Data - Report Kvality sheet with quality information."""
-    sheet_name = "Data - Report Kvality"
+    sheet_name = "Data - Report"
     
     if sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
