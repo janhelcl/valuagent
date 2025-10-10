@@ -206,7 +206,7 @@ INDEX_HTML = """
                 <label>
                   Offset
                   <input id="offset-input" type="number" name="offset" value="0" min="0" max="7" />
-                  <div class="hint">Kolik období (let) zleva přeskočit. 0 = bez přeskočení (standardní), 1 = začít vyplňovat od druhého sloupce, atd. Užitečné když nejnovější data ještě nejsou k dispozici.</div>
+                  <div class="hint">Kolik období (let) zleva přeskočit. 0 = bez přeskočení (máme výkazy k datu ocenění), 1 = začít vyplňovat od druhého sloupce (nemáme výkazy k datu ocenění, pouze data za poslední ÚZ), atd.</div>
                 </label>
                 <label>
                   Tolerance
